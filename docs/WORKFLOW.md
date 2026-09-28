@@ -91,7 +91,7 @@ Shared apps used by most scenarios:
 Life of a brick:
 1. `./protorig new app <name> --lang cpp|py` copies a template that already joins the domain, loads QoS, heartbeats and shuts down cleanly.
 2. The logic and tests are written from a spec, and reviewed as a diff.
-3. `./protorig check` enforces the rules (C++ under `vehicle/`, known IDL types only).
+3. `./protorig check` enforces the rules (only C or C++ under `vehicle/`, known IDL types only).
 4. `./protorig build`, then list the app in a scenario's `run:`.
 
 ---
@@ -112,7 +112,7 @@ interfaces/
 - Where a type goes depends on where it **originates**:
   - Types designed for our demos go in `common/`, even if an external node such as the TC397 uses them. The external project copies the IDL from here.
   - Types that came from another project go in `interfaces/external/<name>/`.
-- C++: `./protorig gen` runs rtiddsgen into `build/`; an app's `CMakeLists.txt` names the IDL it needs.
+- C and C++: `./protorig build` runs rtiddsgen (via `fw_app()`) into `build/`; an app's `CMakeLists.txt` names the IDL it needs.
 - Python: hand-written mirrors in `libs/py/`. A contract test compares them field by field against the IDL.
 
 ---
@@ -199,7 +199,7 @@ Launchers find the repo's Python environment and the Connext license, then hand 
 | `./protorig list` | Lists scenarios with their one-line descriptions |
 | `./protorig check <scenario>` | Validates YAML, language policy, data contract, and flash locks |
 | `./protorig gen <scenario>` | Per-node QoS and peers (`node_qos.xml`) into `build/` |
-| `./protorig build [<app>]` | Generates C++ types with rtiddsgen and builds C++ apps for this machine |
+| `./protorig build [<app>]` | Generates types with rtiddsgen and builds the C/C++ apps for this machine |
 | `./protorig run <scenario> --sim` | Whole scenario on one machine, with twins for external nodes |
 | `./protorig run <scenario> --node <node>` | Only that node's apps (run on that machine) |
 | `./protorig preflight <scenario>` | Every real node up and discovered? |
@@ -376,7 +376,7 @@ scenarios/<name>/test_<name>.py     # each scenario, from its README's acceptanc
 ### How a test works
 - pytest is the runner (discovery, fixtures, readable asserts, isolation, parametrise, selection). It knows nothing about DDS.
 - `libs/py/fw/testing.py` is the DDS toolbox, called from tests.
-- The pytest process itself joins DDS (`bus` fixture, isolated domain, never the live one). The `app` fixture starts the **built** app as a separate process, whatever its language (C++ binary or Python script). The test talks to it only over DDS: black-box.
+- The pytest process itself joins DDS (`bus` fixture, isolated domain, never the live one). The `app` fixture starts the **built** app as a separate process, whatever its language (C or C++ binary, or Python script). The test talks to it only over DDS: black-box.
 - So the same tests work for any language, and later against real hardware, including external nodes like the TC397.
 - Pattern: **listen before acting** (`listen` → `send` → `wait_for` → `assert`); otherwise samples written before the reader exists are missed, and the test passes or fails for the wrong reason (e.g. only because of a history QoS).
 
@@ -404,7 +404,7 @@ Implementation note from the prototype: closing order matters (stop thread → d
 6. Prove the tests can fail: break the app deliberately, one change at a time; each break must fail a test (later possibly `./protorig test --mutate`).
 7. Commit the tests with the app.
 
-Optional: C++ unit tests (GoogleTest) next to an app, only for tricky internal logic; `./protorig test` runs them too.
+Optional: C/C++ unit tests (e.g. GoogleTest for C++) next to an app, only for tricky internal logic; `./protorig test` runs them too.
 
 ### Discovering what to call
 1. The test template is a recipe (commented examples of the common patterns).

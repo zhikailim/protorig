@@ -101,7 +101,7 @@ Shared apps used by most scenarios:
 - `control_panel` (Python, Windows): publishes `DemoControl`.
 
 Life of a brick:
-1. `./protorig new app <name> --lang cpp|py` copies a template that already joins the domain, loads QoS, heartbeats and shuts down cleanly.
+1. `./protorig new app <name> --kind tooling|sim|vehicle` copies a template that already joins the domain, loads QoS, heartbeats and shuts down cleanly.
 2. The logic and tests are written from a spec, and reviewed as a diff.
 3. `./protorig check` enforces the rules (only C or C++ under `vehicle/`, known IDL types only).
 4. `./protorig build`, then list the app in a scenario's `run:`.
@@ -231,7 +231,7 @@ Launchers find the repo's Python environment and the Connext license, then hand 
 | `./protorig run <scenario> --sim` | Whole scenario on one machine, with twins for external nodes |
 | `./protorig run <scenario> --node <node>` | Only that node's apps (run on that machine) |
 | `./protorig preflight <scenario>` | Every real node up and discovered? |
-| `./protorig new scenario\|app\|external <name>` | Create from a template |
+| `./protorig new app\|scenario <name>` | Create from a template (`--kind`, `--desc`, `--scenario`) |
 | `./protorig lock <external> [--add IDL] [--dry-run]` | Record the IDL fingerprints of what was just flashed |
 | `./protorig run --app <app>` | Just one app on this machine, for trying it out |
 | `./protorig send <Topic> '<json>'` | Publish one sample from the command line |
@@ -285,7 +285,9 @@ rtiddsgen is never run with `-example`; only type code is generated.
 
 ## `templates/` — starter kits
 
-`app_cpp/`, `app_py/`, `app_sim/`, `scenario/`, `external/`. `./protorig new <kind> <name>` copies one and replaces `{{name}}` and `{{description}}`. Nothing else.
+Built: `app_py/` (used for both tooling apps and sim twins: they're the same Python skeleton; `--kind` only decides the folder) and `scenario/`. Planned: `app_cpp/` (with the C++ step). An `external/` kit waits until a second external node exists (YAGNI).
+
+`./protorig new app <name> [--kind tooling|sim|vehicle] [--desc "..."] [--scenario <s>]` and `./protorig new scenario <name> [--desc "..."]` copy a kit and replace `{{name}}` and `{{description}}` in file names and contents. Nothing else.
 
 - Templates are copied once, so they stay thin; evolving code lives in `libs/`.
 - Every template works immediately (joins the domain, heartbeats).
@@ -307,7 +309,7 @@ rtiddsgen is never run with `-example`; only type code is generated.
 1. Define the data in `interfaces/common/*.idl`.
 2. Add Python mirrors (`./protorig check` fails until they match).
 3. Add QoS entries in `qos/topics.xml` (`./protorig check` warns if missing).
-4. `./protorig new app <name> --lang cpp`.
+4. `./protorig new app <name> --kind vehicle`.
 5. Fill in `CMakeLists.txt` (IDL line) and `main.cpp` (logic).
 6. `./protorig build`.
 7. Try it alone: `./protorig run --app <name>`, watch with `rtiddsspy`, poke it with `./protorig send <Topic> '<json>'`.
@@ -407,6 +409,12 @@ scenarios/<name>/test_<name>.py     # each scenario, from its README's acceptanc
 - The pytest process itself joins DDS (`bus` fixture, isolated domain, never the live one). The `app` fixture starts the **built** app as a separate process, whatever its language (C or C++ binary, or Python script). The test talks to it only over DDS: black-box.
 - So the same tests work for any language, and later against real hardware, including external nodes like the TC397.
 - Pattern: **listen before acting** (`listen` → `send` → `wait_for` → `assert`); otherwise samples written before the reader exists are missed, and the test passes or fails for the wrong reason (e.g. only because of a history QoS).
+
+### What's built (Python)
+- `libs/py/fw/app.py` (`fw.App`): standard args; domain from `--domain` or the scenario; QoS loaded as the file list, `--qos-variant` selects a `Variant.*` profile; participant `<node>/<app>`; `reader(topic)` / `writer(topic)` by name (types from `fw/topics.py`, QoS from `qos/`); `on_data`, `every`, `run`; 1 Hz heartbeat; obeys `_sys/DemoControl` addressed to it (`target_app` = its name, `target_node` = its node or `*`): stop (exit 0), kill (exit 137), switch QoS variant (restarts itself), set a parameter declared with `app.arg` (with `on_param` callbacks). Node-level commands (`target_app` empty) are left to `node_agent`. Logs incompatible-QoS events with the policy (e.g. `Durability`). Errors in callbacks are logged, never fatal. `--help` lists app arguments too; unknown arguments exit 2.
+- `libs/py/fw/testing.py`: `Bus` (isolated domain 150-199, repo QoS), `send`, `listen` / `Mailbox`, `collect`, `command`, `make_sample`, `wait_for`, `AppLauncher` / `RunningApp` (`start_app(name, *args, node=, folder=)`, waits for the first heartbeat; `.output`, `.wait_exit`, `.interrupt`, `.terminate`).
+- Root `conftest.py`: fixtures `bus` (session) and `start_app` (stops every app it started). Skips with the reason when Connext or a license is missing.
+- `./protorig test [app ...] [-k expr]`: runs check, then pytest on `tests/`, `apps/`, `scenarios/` (or the named apps). Non-zero if either fails.
 
 ### Helpers (`fw/testing.py`)
 | Group | Helpers |

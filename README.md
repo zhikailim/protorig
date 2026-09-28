@@ -47,7 +47,8 @@ Open `protorig.code-workspace` (File → Open Workspace from File) to see the fo
 - [x] `./protorig check`: static checks (scenarios, apps, language policy, repo hygiene); `./protorig list`
 - [x] First scenario defined: `tire-skeleton` (its apps are not built yet, so `check` lists them as errors: that is the to-do list)
 - [x] Data contract (`interfaces/`), Python types (`libs/py/fw`), QoS (`qos/`), flash locks (`./protorig lock`), with checks verified against real Connext
-- [ ] `libs/` (`fw`) and `templates/`
+- [x] Python side of `libs/` (`fw.app`, `fw.testing`), Python app and scenario templates, `./protorig new` and `./protorig test`
+- [ ] C++ side of `libs/` (`fw::App`, `fw.cmake`) and the C++ app template
 - [ ] Shared apps: `node_agent`, `result_gui`, `control_panel`, `tc397_twin`
 - [ ] `bootstrap/`, `gen`, `build`, `run`, `preflight`
 - [ ] Hardware bring-up: VM → TC397 → Pi

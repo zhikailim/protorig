@@ -63,13 +63,25 @@ def load_idl() -> tuple[dict, dict, list[Finding]]:
 
 
 def import_fw(module: str):
-    """Import fw.<module> from libs/py, freshly (tests swap the repo root)."""
+    """Import fw.<module> from the checked repo's libs/py, without side effects.
+
+    The checked repo may not be the one Python already imported fw from (tests
+    check throwaway copies), so import it fresh, then put sys.path and the
+    module cache back exactly as they were.
+    """
     libs = str(repo.ROOT / "libs" / "py")
-    if libs not in sys.path:
-        sys.path.insert(0, libs)
-    for name in [m for m in sys.modules if m == "fw" or m.startswith("fw.")]:
-        del sys.modules[name]
-    return importlib.import_module(f"fw.{module}")
+    saved_path = list(sys.path)
+    saved_mods = {m: sys.modules[m] for m in list(sys.modules) if m == "fw" or m.startswith("fw.")}
+    for m in saved_mods:
+        del sys.modules[m]
+    sys.path.insert(0, libs)
+    try:
+        return importlib.import_module(f"fw.{module}")
+    finally:
+        for m in [m for m in sys.modules if m == "fw" or m.startswith("fw.")]:
+            del sys.modules[m]
+        sys.modules.update(saved_mods)
+        sys.path[:] = saved_path
 
 
 def has_idl() -> bool:

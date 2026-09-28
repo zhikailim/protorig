@@ -4,4 +4,4 @@
 - `tooling/<app>/`: Python. GUIs, control panel, stand-ins.
 - `sim/<twin>/`: Python stand-ins for external nodes. Never deployed.
 
-A folder with `CMakeLists.txt` is a C or C++ app (by its source files); a folder with `main.py` is a Python app. Every app has a `README.md` and a `test_<app>.py`. Create with `./protorig new app <name> --lang cpp|py` (`--lang c` added when C support is built).
+A folder with `CMakeLists.txt` is a C or C++ app (by its source files); a folder with `main.py` is a Python app. Every app has a `README.md` and a `test_<app>.py`. Create with `./protorig new app <name> --kind tooling|sim` (`--kind vehicle` arrives with the C++ step).

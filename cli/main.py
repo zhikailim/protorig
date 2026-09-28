@@ -23,9 +23,7 @@ PLANNED = {
     "build": "Build C/C++ apps (runs rtiddsgen)",
     "run": "Run a scenario (--sim, or --node <node>) or one app (--app)",
     "preflight": "Check every real node is up and discovered",
-    "new": "Create a scenario, app or external node from a template",
     "send": "Publish one sample from the command line",
-    "test": "Run automated tests",
     "deploy": "Push built binaries and configs to a node (cross-compile targets)",
 }
 
@@ -57,6 +55,16 @@ def main(argv=None) -> int:
     lk.add_argument("name", help="external node, e.g. tc397")
     lk.add_argument("--add", action="append", metavar="IDL", help="also lock this IDL file (repeatable)")
     lk.add_argument("--dry-run", action="store_true", help="show what would be locked, write nothing")
+    nw = sub.add_parser("new", help="Create an app or scenario from a template")
+    nw.add_argument("what", choices=["app", "scenario"])
+    nw.add_argument("name")
+    nw.add_argument("--kind", choices=["tooling", "sim", "vehicle"], default="tooling",
+                    help="app kind (default: tooling); decides the folder and language")
+    nw.add_argument("--desc", help="one-line description")
+    nw.add_argument("--scenario", help="create the app inside this scenario (scenario-only app)")
+    ts = sub.add_parser("test", help="Run check, then the automated tests (all, or named apps)")
+    ts.add_argument("apps", nargs="*", help="only these apps' tests")
+    ts.add_argument("-k", help="only tests whose name matches this expression")
     for verb, text in PLANNED.items():
         sub.add_parser(verb, help=f"{text} (not built yet)", add_help=False)
 
@@ -69,6 +77,12 @@ def main(argv=None) -> int:
         return check.main(args)
     if args.verb == "list":
         return cmd_list(args)
+    if args.verb == "new":
+        import new
+        return new.main(args)
+    if args.verb == "test":
+        import test
+        return test.main(args)
     if args.verb == "lock":
         import lock
         return lock.main(args)

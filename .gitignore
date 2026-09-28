@@ -1,0 +1,11 @@
+# Generated output — always recreatable
+build/
+# Machine-specific settings (paths, license location, node identity)
+.local/
+# Python environment and caches
+.venv/
+__pycache__/
+.pytest_cache/
+# Licenses must never be committed
+*.dat
+rti_license*

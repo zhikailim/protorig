@@ -481,8 +481,16 @@ def check_qos() -> Iterator[Finding]:
         base_w, base_r = effective(DEFAULT_PROFILE, topic)
         for prof in profiles[1:]:
             w, r = effective(prof, topic)
-            mixed = incompatibilities(w, base_r) + incompatibilities(base_w, r)
-            if mixed:
-                yield Finding(WARN, "qos/variants.xml", f"{prof.split('::')[1]} changes '{topic}' incompatibly "
-                              f"({mixed[0]}): apply it to every node at once (target '*'), "
-                              "or nodes on the default profile stop receiving")
+            name = prof.split("::")[1]
+            # The mismatch only goes one way, so say which side must not switch alone.
+            pub_side = incompatibilities(w, base_r)      # this variant's writer vs default readers
+            sub_side = incompatibilities(base_w, r)      # default writers vs this variant's reader
+            if pub_side:
+                yield Finding(WARN, "qos/variants.xml",
+                              f"{name}: switch '{topic}' publishers together with their subscribers, or subscribers "
+                              f"on the default profile stop receiving ({'; '.join(pub_side)}). "
+                              "Switching only a publisher is the deliberate mismatch demo.")
+            if sub_side:
+                yield Finding(WARN, "qos/variants.xml",
+                              f"{name}: switch '{topic}' subscribers together with their publishers, or they stop "
+                              f"receiving ({'; '.join(sub_side)}).")

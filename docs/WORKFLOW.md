@@ -10,6 +10,10 @@
 
 **Connext 7.7 (LTS) for all development**: Professional on Windows, the VM and the Pi, and the `rti.connext` Python package (`~=7.7.0`, pinned in `bootstrap/requirements.txt`; `cli/repo.py` holds the same version and a test keeps them in step). `protorig check` warns when a machine has a different version installed. The TC397 keeps its Connext Micro 2.x build; Micro and Pro interoperate over standard RTPS.
 
+## Design principle: when to add a check or tool
+
+Add a check or a tool only when a mistake would be **silent and expensive** (e.g. a QoS profile that stops matching the TC397: no error, just no data, found late on hardware). Otherwise a sentence in the docs is enough. Example of what was deliberately not built: a `variants.yaml` recording how each QoS variant should be applied. The check's warning explains it in one line instead, and variant usage is decided when the Control Panel is built.
+
 ## Mental model
 
 The repo has three layers:

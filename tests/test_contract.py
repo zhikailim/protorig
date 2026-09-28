@@ -26,7 +26,7 @@ import check_contract  # noqa: E402
 import lock            # noqa: E402
 import repo            # noqa: E402
 
-EXPECTED_BASELINE_WARNINGS = {"not locked", "Variant.Alert.BestEffort changes 'Alert' incompatibly"}
+EXPECTED_BASELINE_WARNINGS = {"not locked", "Variant.Alert.BestEffort: switch 'Alert' publishers together"}
 
 
 @pytest.fixture

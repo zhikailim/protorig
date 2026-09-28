@@ -2,6 +2,10 @@
 
 > Status: design agreed on 28 Sep 2026. Folders are created as they are first needed; see "Build progress" in the root README.
 
+## Working in VS Code
+
+`protorig.code-workspace` shows the folders in workflow order with friendly names, without renaming anything on disk (numbered folder names were rejected: the numbers would leak into every path, and inserting a step would mean renumbering). The last entry is the whole repo, so git, terminal, CMake and Python tooling work normally.
+
 ## Mental model
 
 The repo has three layers:

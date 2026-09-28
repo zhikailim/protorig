@@ -1,0 +1,33 @@
+{
+  // Open this file in VS Code (File > Open Workspace from File) to see the
+  // folders in workflow order with friendly names. Nothing on disk is renamed.
+  "folders": [
+    { "path": "scenarios",  "name": "1 · scenarios — what to run" },
+    { "path": "interfaces", "name": "2 · interfaces — data (IDL)" },
+    { "path": "qos",        "name": "3 · qos — behaviour" },
+    { "path": "apps",       "name": "4 · apps — the bricks" },
+    { "path": "libs",       "name": "5 · libs — shared code" },
+    { "path": "external",   "name": "6 · external — other projects' nodes" },
+    { "path": "templates",  "name": "7 · templates — starter kits" },
+    { "path": "tests",      "name": "8 · tests — framework tests" },
+    // The whole repo: git, terminal, CMake and Python tooling work from here,
+    // and it holds everything else (bootstrap, cli, docs, launchers).
+    { "path": ".",          "name": "⚙ repo root (bootstrap, cli, docs…)" }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.pytest_cache": true
+    }
+  },
+  "extensions": {
+    // Suggested once when the workspace is first opened.
+    "recommendations": [
+      "ms-python.python",
+      "ms-vscode.cpptools",
+      "ms-vscode.cmake-tools",
+      "ms-vscode-remote.remote-ssh",
+      "redhat.vscode-yaml"
+    ]
+  }
+}

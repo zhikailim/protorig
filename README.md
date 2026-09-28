@@ -23,6 +23,10 @@ git clone https://github.com/zhikailim/protorig && cd protorig
 
 `prz` is the short alias for `protorig`, set up by bootstrap.
 
+## Working in VS Code
+
+Open `protorig.code-workspace` (File → Open Workspace from File) to see the folders in workflow order: scenarios → interfaces → qos → apps → libs → external → templates → tests, with the whole repo last. GitHub's web view always sorts alphabetically; the table above is the guide there.
+
 ## Documentation
 
 - [docs/WORKFLOW.md](docs/WORKFLOW.md): the full design, commands and workflows.

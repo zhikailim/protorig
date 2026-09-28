@@ -1,0 +1,49 @@
+/*
+ * protorig.idl — the framework's own "backstage" types.
+ *
+ * Used on the _sys/ topics (see docs/WORKFLOW.md, naming conventions):
+ *   _sys/NodeStatus   heartbeat from every app, via fw::App / fw.app
+ *   _sys/DemoControl  commands from the Control Panel, carried out by node_agent
+ *
+ * Design rules, so these can later run on Connext Micro or Cert unchanged:
+ *   - bounded strings only (string<N>), no unbounded sequences
+ *   - explicit @appendable
+ *   - no dependency on any external project's IDL (timestamps are plain ns)
+ */
+module protorig {
+
+    // One heartbeat per running app, once per second.
+    // Keyed by (node, app): the Result GUI shows one row per app per node, and an
+    // instance going silent (liveliness lost) is how a dead app turns red.
+    @appendable
+    struct NodeStatus {
+        @key string<32>    node;          // node name from scenario.yaml, e.g. "hpc-pi"
+        @key string<32>    app;           // app name, e.g. "hpc_monitor"
+        string<16>         os;            // linux | windows | qnx | ...
+        string<64>         qos_variant;   // QoS variant in use ("" = default profile)
+        unsigned long long seq;           // increments every heartbeat
+        float              cpu_load;      // this process, 0.0 .. 1.0
+        long long          stamp_ns;      // sender's wall clock, ns since the Unix epoch
+    };
+
+    enum Command {
+        CMD_SET_QOS_VARIANT,   // arg = variant name ("" = back to default); app restarts
+        CMD_START_APP,         // target_app starts (as listed in the scenario)
+        CMD_STOP_APP,          // clean stop
+        CMD_KILL_APP,          // abrupt kill, for failover demos
+        CMD_SET_PARAM          // arg = parameter name, value = new value
+    };
+
+    // A command from the Control Panel. target_node "*" = every node.
+    // cmd_id increases per command, so a node can ignore repeats.
+    @appendable
+    struct DemoControl {
+        @key string<32>    target_node;
+        string<32>         target_app;    // "" = the node itself
+        unsigned long long cmd_id;
+        Command            command;
+        string<64>         arg;
+        double             value;
+    };
+
+}; // module protorig

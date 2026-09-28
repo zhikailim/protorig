@@ -1,0 +1,25 @@
+/*
+ * alerts.idl — alerts raised by apps for people to see (dashboard, IVI).
+ * Scenario data: published on topic "Alert" (plain name, no prefix).
+ */
+module alerts {
+
+    enum Severity {
+        SEVERITY_INFO,
+        SEVERITY_WARNING,
+        SEVERITY_CRITICAL
+    };
+
+    // Keyed by (source, alert_id): each alert is its own instance, so a GUI
+    // shows what is currently active, and a disposed instance clears it.
+    @appendable
+    struct Alert {
+        @key string<64>  source;      // "<node>/<app>", e.g. "hpc-vm/hpc_monitor"
+        @key string<32>  alert_id;    // e.g. "LOW_PRESSURE_FL"
+        Severity         severity;
+        string<128>      message;     // human-readable, shown as is
+        double           value;       // the reading that triggered it
+        long long        stamp_ns;    // ns since the Unix epoch
+    };
+
+}; // module alerts

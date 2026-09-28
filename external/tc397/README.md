@@ -17,6 +17,8 @@ Publishes dummy tire-pressure samples (the existing sample application).
 
 ## Files
 
+- `external.yaml`: the topic, type and writer QoS in machine-readable form; `protorig check` keeps every QoS profile compatible with it.
+
 - `known_good_USER_QOS_PROFILES.xml`: the Windows host profile that is known to receive data from the TC397. Key parts: `allow_interfaces_list` restricted to the host's own IP with `max_interface_count` 1 (multi-NIC Windows hosts otherwise advertise unreachable addresses), and unicast initial peer `4@builtin.udpv4://172.23.100.101`.
 - `host_sample_Temperature_subscriber.cxx`: the working host-side subscriber (Traditional C++ API), for reference.
 
@@ -25,4 +27,4 @@ Publishes dummy tire-pressure samples (the existing sample application).
 - Which field(s) carry the pressure, and one tire or four (how tires are identified)?
 - Confirm the domain ID and the discovery mode.
 - The TC397's own initial peer list: does it announce to the VM and Pi, or only to Windows? The 15-minute `rtiddsspy` smoke test from the VM answers this.
-- The IDL files move to `interfaces/external/tc397/` with the data-contract step, together with `flashed.lock`.
+- Once you've confirmed the board runs the IDL in `interfaces/external/tc397/` (the host sample receiving data is good evidence), run `./protorig lock tc397` to record it.

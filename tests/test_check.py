@@ -52,6 +52,7 @@ def fake(tmp_path, monkeypatch):
     _app(tmp_path, "vehicle", "monitor", "cpp")
     _app(tmp_path, "sim", "ecu_twin", "py")
     (tmp_path / "external" / "ecu").mkdir(parents=True)
+    (tmp_path / "external" / "ecu" / "external.yaml").write_text("topics: {}\n")
 
     class F:
         root = tmp_path
@@ -196,7 +197,8 @@ def test_missing_readme_warns(fake):
 
 
 def test_missing_external_folder_warns(fake):
-    (fake.root / "external" / "ecu").rmdir()
+    import shutil
+    shutil.rmtree(fake.root / "external" / "ecu")
     fake.scenario()
     assert any("external/ecu/" in w for w in fake.warnings())
 

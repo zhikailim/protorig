@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  variants.xml — alternative behaviours the Control Panel can switch an app to.
+
+  Each variant is a profile named "Variant.<what it changes>", based on
+  protorig::Topics, overriding only the topics it changes. Switching sends
+  CMD_SET_QOS_VARIANT; node_agent restarts the app with that profile as its
+  default (some QoS cannot change on a live reader or writer).
+
+  `protorig check` rejects any variant that would stop matching an external
+  node's writer (see the rule at the top of topics.xml).
+-->
+<dds xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="https://community.rti.com/schema/current/rti_dds_qos_profiles.xsd">
+  <qos_library name="protorig_variants">
+
+    <!-- Demo beat: "what goes wrong without reliability". Alerts become best
+         effort; under packet loss, some alerts never arrive. -->
+    <qos_profile name="Variant.Alert.BestEffort" base_name="protorig::Topics">
+      <datawriter_qos topic_filter="Alert">
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+      </datawriter_qos>
+      <datareader_qos topic_filter="Alert">
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+      </datareader_qos>
+    </qos_profile>
+
+    <!-- Longer tire-pressure history for the trend plot (reader-local, always
+         compatible with the ECU). -->
+    <qos_profile name="Variant.TirePressure.LongHistory" base_name="protorig::Topics">
+      <datareader_qos topic_filter="Example Temperature">
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>500</depth></history>
+      </datareader_qos>
+    </qos_profile>
+
+  </qos_library>
+</dds>

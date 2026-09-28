@@ -45,7 +45,7 @@ Open `protorig.code-workspace` (File → Open Workspace from File) to see the fo
 - [x] Repo skeleton
 - [x] `./protorig check`: static checks (scenarios, apps, language policy, repo hygiene); `./protorig list`
 - [x] First scenario defined: `tire-skeleton` (its apps are not built yet, so `check` lists them as errors: that is the to-do list)
-- [ ] Data contract (`interfaces/`) and QoS (`qos/`)
+- [x] Data contract (`interfaces/`), Python types (`libs/py/fw`), QoS (`qos/`), flash locks (`./protorig lock`), with checks verified against real Connext
 - [ ] `libs/` (`fw`) and `templates/`
 - [ ] Shared apps: `node_agent`, `result_gui`, `control_panel`, `tc397_twin`
 - [ ] `bootstrap/`, `gen`, `build`, `run`, `preflight`

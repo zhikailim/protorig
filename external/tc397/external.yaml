@@ -1,0 +1,18 @@
+# What the TC397 puts on the wire, as its firmware is built today.
+#
+# This file is the machine-readable side of external/tc397/README.md. It lets
+# `protorig check` prove that no QoS profile or variant in qos/ would stop our
+# readers from matching the ECU (a mismatch fails silently: no data, no error).
+#
+# Edit it only when the firmware changes, then reflash and `protorig lock tc397`.
+
+topics:
+  "Example Temperature":
+    type: sensor_msgs::msg::Temperature
+    # QoS the ECU's DataWriter OFFERS. Readers may request the same or weaker.
+    writer:
+      reliability: BEST_EFFORT      # known-good profile is based on Generic.BestEffort
+      durability: VOLATILE
+      deadline: infinite            # a reader requesting any finite deadline would NOT match
+      liveliness_lease: infinite    # same for a finite liveliness lease
+      ownership: SHARED

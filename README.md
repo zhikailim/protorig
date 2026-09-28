@@ -30,7 +30,7 @@ git clone https://github.com/zhikailim/protorig && cd protorig
 
 ## Ground rules
 
-- **Vehicle code** (anything that would run in a vehicle, drone or device) is C++17 with the Connext Modern C++ API, or C with Connext Micro. **Tooling** (GUIs, control panel, sim twins, tests) may be Python.
+- **Vehicle code** (anything that would run in a vehicle, drone or device) is C++17 with the Connext Modern C++ API by default, or C (Connext Pro C API, Micro, or Cert) when safety requirements call for it. **Tooling** (GUIs, control panel, sim twins, tests) may be Python. Never Python in vehicle code.
 - **Generated files live only in `build/`** and are never edited.
 - **Nothing machine-specific in the repo:** paths and licenses go in the git-ignored `.local/`.
 - **Everything is tested,** including deliberate breakage, before it's handed over.

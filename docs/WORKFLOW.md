@@ -61,12 +61,26 @@ The README is written first and is the spec the apps are built from.
 ## `apps/` — the bricks
 
 ```
-apps/vehicle/<app>/    # C++17, CMake — anything that would run in a vehicle
+apps/vehicle/<app>/    # C++17 (default) or C (safety), CMake — anything that would run in a vehicle
 apps/tooling/<app>/    # Python — GUIs, control panel, stand-ins
 apps/sim/<twin>/       # Python — stand-ins for external nodes, never deployed
 ```
 
-- No per-app config file. A folder with `CMakeLists.txt` is a C++ app; a folder with `main.py` is a Python app.
+- No per-app config file. A folder with `CMakeLists.txt` is a C or C++ app (by its sources); a folder with `main.py` is a Python app.
+
+### Language policy for vehicle apps
+C++17 with the Connext Modern C++ API by default. C when safety requirements call for it: Connext Pro C API, Connext Micro, or Connext Cert (possibly with MISRA C). Never Python.
+
+C support is a requirement, built when first needed (like cross-compiling):
+| Piece | C++ (now) | C (when needed) |
+|---|---|---|
+| Template | `templates/app_cpp/` | `templates/app_c/`, same numbered recipe |
+| Helpers | `libs/cpp/fw/` | `libs/c/fw/`: args, participant, heartbeat, clean shutdown in plain C |
+| Build | `fw_app()`, rtiddsgen C++ | Same `fw_app()`, detects `.c` sources, rtiddsgen for C (or Micro) |
+| Language check | `.cpp` allowed in `vehicle/` | `.c` also allowed; `.py` rejected |
+| Tests | Black-box over DDS | Identical |
+
+Known item: Micro and Cert are configured in code, not by loading QoS XML at runtime. For those apps, `./protorig gen` must generate QoS and peer settings as C source from the same `qos/` files and `scenario.yaml`, instead of `node_qos.xml`.
 - Every app has a `README.md`: what it does, its arguments, topics in and out.
 
 Shared apps used by most scenarios:

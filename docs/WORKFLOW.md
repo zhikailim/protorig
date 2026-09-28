@@ -28,7 +28,7 @@ One folder per demo scenario:
 scenarios/<name>/
 ├─ scenario.yaml     # what runs where
 ├─ README.md         # the story and how to present it
-└─ apps/             # optional: apps only this scenario needs
+└─ apps/<kind>/<app> # optional: apps only this scenario needs (vehicle | tooling | sim, same rules as shared apps)
 ```
 
 `scenario.yaml`:
@@ -193,6 +193,7 @@ These show up on screen in Admin Console, in front of customers, so they are par
 protorig/
 ├─ protorig    # launcher for Linux / VM / Pi (bash)
 ├─ protorig.ps1    # launcher for Windows (PowerShell)
+├─ protorig.cmd    # launcher for Windows cmd.exe, and fallback if PowerShell blocks scripts
 └─ cli/        # the real program (Python), one file per verb
 ```
 

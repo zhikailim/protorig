@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# protorig — launcher for Linux (VM, Raspberry Pi) and macOS.
+#
+# Finds the repo's Python (the .venv made by bootstrap, else python3), makes the
+# shared Python libs importable, and hands over to cli/main.py. All real logic
+# lives in cli/, so every verb behaves the same on every OS.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -x "$ROOT/.venv/bin/python" ]]; then
+    PY="$ROOT/.venv/bin/python"
+else
+    PY="$(command -v python3 || true)"
+fi
+if [[ -z "$PY" ]]; then
+    echo "protorig: Python 3 not found. Run ./bootstrap/linux.sh first." >&2
+    exit 2
+fi
+
+export PYTHONPATH="$ROOT/libs/py${PYTHONPATH:+:$PYTHONPATH}"
+exec "$PY" "$ROOT/cli/main.py" "$@"

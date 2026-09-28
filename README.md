@@ -16,7 +16,7 @@ Apps are reusable bricks. A **scenario** is a short instruction sheet saying whi
 
 ```bash
 git clone https://github.com/zhikailim/protorig && cd protorig
-./bootstrap/linux.sh              # Windows: .\bootstrap\windows.ps1
+./bootstrap/linux.sh              # Windows: .\bootstrap\windows.ps1  (or protorig.cmd if scripts are blocked)
 ./protorig check
 ./protorig run tire-skeleton --sim
 ```
@@ -43,10 +43,10 @@ Open `protorig.code-workspace` (File → Open Workspace from File) to see the fo
 
 - [x] Design agreed ([docs/WORKFLOW.md](docs/WORKFLOW.md))
 - [x] Repo skeleton
-- [ ] `./protorig check`: static checks
+- [x] `./protorig check`: static checks (scenarios, apps, language policy, repo hygiene); `./protorig list`
+- [x] First scenario defined: `tire-skeleton` (its apps are not built yet, so `check` lists them as errors: that is the to-do list)
 - [ ] Data contract (`interfaces/`) and QoS (`qos/`)
 - [ ] `libs/` (`fw`) and `templates/`
 - [ ] Shared apps: `node_agent`, `result_gui`, `control_panel`, `tc397_twin`
-- [ ] First scenario: `tire-skeleton`
 - [ ] `bootstrap/`, `gen`, `build`, `run`, `preflight`
 - [ ] Hardware bring-up: VM → TC397 → Pi

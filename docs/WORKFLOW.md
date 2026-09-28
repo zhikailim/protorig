@@ -6,6 +6,10 @@
 
 `protorig.code-workspace` shows the folders in workflow order with friendly names, without renaming anything on disk (numbered folder names were rejected: the numbers would leak into every path, and inserting a step would mean renumbering). The last entry is the whole repo, so git, terminal, CMake and Python tooling work normally.
 
+## Connext version
+
+**Connext 7.7 (LTS) for all development**: Professional on Windows, the VM and the Pi, and the `rti.connext` Python package (`~=7.7.0`, pinned in `bootstrap/requirements.txt`; `cli/repo.py` holds the same version and a test keeps them in step). `protorig check` warns when a machine has a different version installed. The TC397 keeps its Connext Micro 2.x build; Micro and Pro interoperate over standard RTPS.
+
 ## Mental model
 
 The repo has three layers:
@@ -372,7 +376,7 @@ From scratch: `git clone` → `./bootstrap/linux.sh` (or `.\bootstrap\windows.ps
 
 Rule: nothing machine-specific in the repo. Discoveries go to git-ignored `.local/` (`machine.yaml`), read by the launchers.
 
-To verify: whether the Connext 7.6 bundle includes rtiddsgen for an arm64 Linux host. If not, Pi binaries are cross-built on the VM and deployed.
+To verify: whether the Connext 7.7 bundle includes rtiddsgen for an arm64 Linux host. If not, Pi binaries are cross-built on the VM and deployed.
 
 ## `tests/` — proving it works
 

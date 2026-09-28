@@ -18,9 +18,10 @@ Publishes dummy tire-pressure samples (the existing sample application).
 ## Files
 
 - `external.yaml`: the topic, type and writer QoS in machine-readable form; `protorig check` keeps every QoS profile compatible with it.
-
 - `known_good_USER_QOS_PROFILES.xml`: the Windows host profile that is known to receive data from the TC397. Key parts: `allow_interfaces_list` restricted to the host's own IP with `max_interface_count` 1 (multi-NIC Windows hosts otherwise advertise unreachable addresses), and unicast initial peer `4@builtin.udpv4://172.23.100.101`.
 - `host_sample_Temperature_subscriber.cxx`: the working host-side subscriber (Traditional C++ API), for reference.
+
+The known-good profile and host sample were built with Connext 7.6.0; protorig uses 7.7 on the host side. Micro 2.x on the ECU interoperates with Pro 7.7 over standard RTPS, but it's worth rebuilding the host sample with 7.7 once, as a quick sanity check.
 
 ## Open items
 

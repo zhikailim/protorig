@@ -34,6 +34,7 @@ Open `protorig.code-workspace` (File → Open Workspace from File) to see the fo
 
 ## Ground rules
 
+- **Connext 7.7 (LTS)** for all development, on every machine (see [docs/WORKFLOW.md](docs/WORKFLOW.md#connext-version)).
 - **Vehicle code** (anything that would run in a vehicle, drone or device) is C++17 with the Connext Modern C++ API by default, or C (Connext Pro C API, Micro, or Cert) when safety requirements call for it. **Tooling** (GUIs, control panel, sim twins, tests) may be Python. Never Python in vehicle code.
 - **Generated files live only in `build/`** and are never edited.
 - **Nothing machine-specific in the repo:** paths and licenses go in the git-ignored `.local/`.

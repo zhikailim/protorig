@@ -35,6 +35,7 @@ def real(tmp_path, monkeypatch):
     for d in ("interfaces", "libs", "qos", "external"):
         shutil.copytree(REPO / d, tmp_path / d, ignore=shutil.ignore_patterns("__pycache__", "flashed.lock"))
     monkeypatch.setattr(repo, "ROOT", tmp_path)
+    monkeypatch.setattr(check_contract, "installed_connext_python", lambda: repo.CONNEXT_VERSION + ".0")
 
     class R:
         root = tmp_path

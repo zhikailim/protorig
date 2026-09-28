@@ -14,6 +14,10 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# Connext version used for all development (7.7 LTS). The pin in
+# bootstrap/requirements.txt must agree; tests/test_version.py checks it.
+CONNEXT_VERSION = "7.7"
+
 # App kinds, in lookup order. The folder an app sits in decides its kind.
 APP_KINDS = ("vehicle", "tooling", "sim")
 

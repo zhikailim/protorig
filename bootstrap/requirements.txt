@@ -1,0 +1,8 @@
+# Python packages for protorig tooling, sim twins and tests.
+# Installed into the repo's .venv by bootstrap.
+#
+# Connext version for ALL development: 7.7 (LTS). Keep this pin and
+# CONNEXT_VERSION in cli/repo.py in step; a test checks they agree.
+rti.connext~=7.7.0
+pyyaml>=6
+pytest>=8

@@ -47,6 +47,9 @@ def _app(root: Path, kind: str, name: str, language: str, extra: dict | None = N
 def fake(tmp_path, monkeypatch):
     """A clean, passing repo; tests mutate it. Returns a helper namespace."""
     monkeypatch.setattr(repo, "ROOT", tmp_path)
+    # These tests are about the repo, not this machine's installed Connext version.
+    import check_contract
+    monkeypatch.setattr(check_contract, "installed_connext_python", lambda: repo.CONNEXT_VERSION + ".0")
     _app(tmp_path, "tooling", "gui", "py")
     _app(tmp_path, "vehicle", "agent", "cpp")
     _app(tmp_path, "vehicle", "monitor", "cpp")

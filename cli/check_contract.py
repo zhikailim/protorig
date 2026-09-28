@@ -100,6 +100,30 @@ def external_specs() -> dict[str, dict]:
 
 
 # ---------------------------------------------------------------------------
+# 0. Connext version on this machine
+# ---------------------------------------------------------------------------
+
+def installed_connext_python() -> str | None:
+    try:
+        from importlib.metadata import version
+        return version("rti.connext")
+    except Exception:
+        return None
+
+
+@check("Connext version")
+def check_connext_version() -> Iterator[Finding]:
+    want = repo.CONNEXT_VERSION
+    got = installed_connext_python()
+    if got is None:
+        yield Finding(WARN, "this machine", f"Connext Python package not installed; run bootstrap "
+                                            f"(or: pip install \"rti.connext~={want}.0\")")
+    elif not (got == want or got.startswith(want + ".")):
+        yield Finding(WARN, "this machine", f"Connext Python package is {got}, but protorig uses {want}: "
+                                            f"pip install \"rti.connext~={want}.0\"")
+
+
+# ---------------------------------------------------------------------------
 # 1. IDL files
 # ---------------------------------------------------------------------------
 

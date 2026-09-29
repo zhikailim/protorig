@@ -1,6 +1,5 @@
 # {{name}}: {{description}}
 # Which apps run on which machine. See docs/WORKFLOW.md (scenarios) for every key.
-name: {{name}}
 description: {{description}}
 domain: 0
 

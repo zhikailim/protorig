@@ -42,7 +42,7 @@ scenarios/<name>/
 `scenario.yaml`:
 
 ```yaml
-name: temperature-skeleton
+# the folder name (scenarios/temperature-skeleton) is the scenario's name
 description: HPC failover with over-temperature alerts
 domain: 0
 nodes:

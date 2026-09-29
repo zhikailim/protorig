@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
+SAMPLE = "sample-scenario"          # the framework tests' own scenario (never a real demo's name)
 sys.path.insert(0, str(REPO / "libs" / "py"))
 sys.path.insert(0, str(REPO / "cli"))
 
@@ -248,10 +249,15 @@ def test_help_lists_app_arguments(probe_dir):
     assert out.returncode == 0 and "--rate" in out.stdout and "--qos-variant" in out.stdout
 
 
-def test_domain_comes_from_scenario():
-    from fw.app import scenario_domain
-    assert scenario_domain("temperature-skeleton") == 0
-    assert scenario_domain("no-such-scenario") is None
+def test_domain_comes_from_scenario(tmp_path, monkeypatch):
+    """Uses its own sample scenario, so renaming or deleting a real one can't break it."""
+    import fw.app
+    d = tmp_path / "scenarios" / "sample-scenario"
+    d.mkdir(parents=True)
+    (d / "scenario.yaml").write_text("domain: 7\n")
+    monkeypatch.setattr(fw.app, "ROOT", tmp_path)
+    assert fw.app.scenario_domain("sample-scenario") == 7
+    assert fw.app.scenario_domain("no-such-scenario") is None
 
 
 # --- fuzz: garbage Control Panel commands must never take the app down -------------
@@ -290,8 +296,14 @@ def test_make_sample_rejects_misspelt_field():
 
 @pytest.fixture
 def repo_copy(tmp_path):
+    """A copy of the framework, with the real scenarios replaced by one sample scenario,
+    so these tests never depend on what your demos are called."""
     dst = tmp_path / "repo"
     shutil.copytree(REPO, dst, ignore=shutil.ignore_patterns(".git", "__pycache__", "build", ".venv", ".local"))
+    for d in (dst / "scenarios").iterdir():
+        if d.is_dir():
+            shutil.rmtree(d)
+    assert _protorig(dst, "new", "scenario", SAMPLE, "--desc", "sample for framework tests").returncode == 0
     return dst
 
 
@@ -329,7 +341,7 @@ def test_new_app_passes_check(repo_copy):
     (["new", "app", "x", "--kind", "vehicle"], "C/C++ apps arrive"),
     (["new", "app", "x", "--scenario", "nope"], "no scenario 'nope'"),
     (["new", "scenario", "Bad_Name"], "not a valid scenario name"),
-    (["new", "scenario", "temperature-skeleton"], "already exists"),
+    (["new", "scenario", SAMPLE], "already exists"),
 ])
 def test_new_refuses_bad_requests(repo_copy, args, expected):
     out = _protorig(repo_copy, *args)
@@ -350,5 +362,5 @@ def test_new_scenario_is_valid_apart_from_unbuilt_apps(repo_copy):
 
 
 def test_scenario_local_app(repo_copy):
-    assert _protorig(repo_copy, "new", "app", "only_here", "--scenario", "temperature-skeleton").returncode == 0
-    assert (repo_copy / "scenarios" / "temperature-skeleton" / "apps" / "tooling" / "only_here" / "main.py").exists()
+    assert _protorig(repo_copy, "new", "app", "only_here", "--scenario", SAMPLE).returncode == 0
+    assert (repo_copy / "scenarios" / SAMPLE / "apps" / "tooling" / "only_here" / "main.py").exists()

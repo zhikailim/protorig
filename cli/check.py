@@ -22,7 +22,7 @@ import repo
 ERROR, WARN = "ERROR", "WARN"
 
 NODE_KEYS = {"ip", "os", "arch", "run", "external", "sim"}
-SCENARIO_KEYS = {"name", "description", "domain", "nodes"}
+SCENARIO_KEYS = {"description", "domain", "nodes"}     # the folder name is the scenario's name
 KNOWN_OS = {"linux", "windows", "qnx", "android", "none"}
 KNOWN_ARCH = {"x86_64", "aarch64", "armv7", "tricore"}
 
@@ -30,7 +30,7 @@ KNOWN_ARCH = {"x86_64", "aarch64", "armv7", "tricore"}
 @dataclass
 class Finding:
     severity: str
-    where: str        # e.g. "scenarios/temperature-skeleton" or "apps/vehicle/foo"
+    where: str        # e.g. "scenarios/my-demo" or "apps/vehicle/foo"
     message: str
 
     def __str__(self) -> str:
@@ -57,15 +57,15 @@ def check_scenarios() -> Iterator[Finding]:
     for s in repo.load_scenarios():
         where = f"scenarios/{s.name}"
         if not repo.SCENARIO_NAME.match(s.name):
-            yield Finding(ERROR, where, "folder name must be lowercase letters, digits and '-' (e.g. temperature-skeleton)")
+            yield Finding(ERROR, where, "folder name must be lowercase letters, digits and '-' (e.g. my-demo)")
         if s.error:
             yield Finding(ERROR, where, s.error)
             continue
         d = s.data
-        for k in sorted(set(d) - SCENARIO_KEYS):
+        for k in sorted(set(d) - SCENARIO_KEYS - {"name"}):
             yield Finding(ERROR, where, f"unknown key '{k}' (allowed: {', '.join(sorted(SCENARIO_KEYS))})")
-        if d.get("name") != s.name:
-            yield Finding(ERROR, where, f"name: '{d.get('name')}' must match the folder name '{s.name}'")
+        if "name" in d:     # older scenario files had it; stored twice, it could only drift
+            yield Finding(WARN, where, "name: isn't used: the folder name is the scenario's name; delete this line")
         if not d.get("description"):
             yield Finding(WARN, where, "no description: it is what `protorig list` shows")
         dom = d.get("domain")

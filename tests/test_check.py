@@ -21,7 +21,6 @@ import check  # noqa: E402
 import repo   # noqa: E402
 
 GOOD_SCENARIO = {
-    "name": "demo-a",
     "description": "a test scenario",
     "domain": 7,
     "nodes": {
@@ -139,7 +138,6 @@ SCENARIO_BREAKS = [
     ("domain out of range",    _mutated(domain=300),                           "domain must be"),
     ("domain as text",         _mutated(domain="0"),                           "domain must be"),
     ("domain as bool",         _mutated(domain=True),                          "domain must be"),
-    ("name mismatch",          _mutated(name="other"),                         "must match the folder"),
     ("no nodes",               _mutated(nodes={}),                             "at least one node"),
     ("node not a mapping",     _mutated(nodes__hpc="10.0.0.3"),                "must be a mapping"),
     ("bad node name",          _mutated(nodes={"HPC_1": {"ip": "10.0.0.9", "os": "linux", "run": ["agent"]}}),
@@ -157,7 +155,7 @@ def test_scenario_break_is_reported(fake, label, data, expected):
 
 
 def test_invalid_yaml_is_reported_not_crashing(fake):
-    fake.scenario(raw="name: demo-a\nnodes: [unclosed\n")
+    fake.scenario(raw="description: x\nnodes: [unclosed\n")
     assert any("not valid YAML" in e for e in fake.errors())
 
 
@@ -172,8 +170,7 @@ def test_missing_scenario_yaml(fake):
 
 
 def test_bad_scenario_folder_name(fake):
-    data = _mutated(name="Demo_A")
-    fake.scenario(data, name="Demo_A")
+    fake.scenario(GOOD_SCENARIO, name="Demo_A")
     assert any("folder name must be" in e for e in fake.errors())
 
 
@@ -185,6 +182,7 @@ WARNING_CASES = [
     ("unknown arch",     _mutated(nodes__hpc__arch="riscv"),         "arch: 'riscv'"),
     ("no sim twin",      _mutated(nodes__ecu__sim=DELETE),           "no sim: twin"),
     ("duplicate run",    _mutated(nodes__hpc__run=["agent", "agent"]), "listed twice"),
+    ("leftover name:",   _mutated(name="other"),                     "the folder name is the scenario's name"),
 ]
 
 
@@ -330,7 +328,9 @@ LAUNCHER = str(REPO / ("protorig.cmd" if os.name == "nt" else "protorig"))
 
 def test_launcher_help_and_list():
     out = subprocess.run([LAUNCHER, "list"], capture_output=True, text=True)
-    assert out.returncode == 0 and "temperature-skeleton" in out.stdout
+    # Every scenario folder is listed, whatever the scenarios are called (no demo names here).
+    real = [d.name for d in (REPO / "scenarios").iterdir() if (d / "scenario.yaml").exists()]
+    assert out.returncode == 0 and all(name in out.stdout for name in real), out.stdout
     out = subprocess.run([LAUNCHER, "--help"], capture_output=True, text=True)
     assert out.returncode == 0 and "check" in out.stdout
 

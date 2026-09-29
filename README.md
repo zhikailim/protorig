@@ -18,7 +18,7 @@ Apps are reusable bricks. A **scenario** is a short instruction sheet saying whi
 git clone https://github.com/zhikailim/protorig && cd protorig
 ./bootstrap/linux.sh              # Windows: .\bootstrap\windows.ps1  (or protorig.cmd if scripts are blocked)
 ./protorig check
-./protorig run tire-skeleton --sim
+./protorig run temp-skeleton --sim
 ```
 
 `prz` is the short alias for `protorig`, set up by bootstrap.
@@ -45,11 +45,11 @@ Open `protorig.code-workspace` (File → Open Workspace from File) to see the fo
 - [x] Design agreed ([docs/WORKFLOW.md](docs/WORKFLOW.md))
 - [x] Repo skeleton
 - [x] `./protorig check`: static checks (scenarios, apps, language policy, repo hygiene); `./protorig list`
-- [x] First scenario defined: `tire-skeleton` (its apps are not built yet, so `check` lists them as errors: that is the to-do list)
+- [x] First scenario defined: `temp-skeleton` (its apps are not built yet, so `check` lists them as errors: that is the to-do list)
 - [x] Data contract (`interfaces/`), Python types (`libs/py/fw`), QoS (`qos/`), flash locks (`./protorig lock`), with checks verified against real Connext
 - [x] Python side of `libs/` (`fw.app`, `fw.testing`), Python app and scenario templates, `./protorig new` and `./protorig test`
 - [ ] C++ side of `libs/` (`fw::App`, `fw.cmake`) and the C++ app template
-- [ ] `tc397_twin`: requirements under review
+- [ ] `tc397_twin`: requirements under review (temperature ramp, confirmed from the ECU source)
 - [ ] Shared apps: `node_agent`, `result_gui`, `control_panel`
 - [ ] `bootstrap/`, `gen`, `build`, `run`, `preflight`
 - [ ] Hardware bring-up: VM → TC397 → Pi

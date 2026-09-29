@@ -4,7 +4,7 @@ fw.testing — helpers for testing protorig apps over DDS, from the outside.
 A test starts the real app as a separate process (any language) and talks to
 it only through DDS, like any other node would:
 
-    def test_publishes_pressure(bus, start_app):
+    def test_publishes_temperature(bus, start_app):
         app = start_app("tc397_twin", "--rate", "20")      # waits for its heartbeat
         samples = bus.collect("Example Temperature", seconds=1.0)
         assert len(samples) >= 15

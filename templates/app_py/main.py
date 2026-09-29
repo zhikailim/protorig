@@ -20,19 +20,19 @@ from fw import types as T  # noqa: F401  (the IDL types: T.Alert, T.Temperature,
 app = App("{{name}}", "{{description}}")
 
 # 2. App-specific arguments (they appear in --help; the Control Panel can change them live).
-# threshold = app.arg("--threshold", 28.0, "alert below this pressure (kPa)")
+# threshold = app.arg("--threshold", 14.5, "alert above this temperature (degC)")
 
 # 3. Readers and writers, by topic name (known topics: libs/py/fw/topics.py).
-# tires  = app.reader("Example Temperature")
+# temps  = app.reader("Example Temperature")
 # alerts = app.writer("Alert")
 
 # 4. React to incoming data.
-# def on_tire(sample: T.Temperature):
-#     if sample.temperature < app.params["threshold"]:
-#         alerts.write(T.Alert(source=app.who, alert_id="LOW_PRESSURE",
+# def on_temp(sample: T.Temperature):
+#     if sample.temperature > app.params["threshold"]:
+#         alerts.write(T.Alert(source=app.who, alert_id="TEMP_HIGH",
 #                              severity=T.Severity.SEVERITY_WARNING,
-#                              message="Tire pressure low", value=sample.temperature))
-# app.on_data(tires, on_tire)
+#                              message="Temperature high", value=sample.temperature))
+# app.on_data(temps, on_temp)
 
 # 5. Periodic work.
 # app.every(0.1, lambda: ...)

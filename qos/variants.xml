@@ -27,9 +27,9 @@
       </datareader_qos>
     </qos_profile>
 
-    <!-- Longer tire-pressure history for the trend plot (reader-local, always
+    <!-- Longer temperature history for the trend plot (reader-local, always
          compatible with the ECU). -->
-    <qos_profile name="Variant.TirePressure.LongHistory" base_name="protorig::Topics">
+    <qos_profile name="Variant.Temperature.LongHistory" base_name="protorig::Topics">
       <datareader_qos topic_filter="Example Temperature">
         <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
         <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>

@@ -42,8 +42,8 @@ scenarios/<name>/
 `scenario.yaml`:
 
 ```yaml
-name: tire-skeleton
-description: HPC failover with tire-pressure alerts
+name: temp-skeleton
+description: HPC failover with over-temperature alerts
 domain: 0
 nodes:
   windows: { ip: 172.23.100.102, os: windows, run: [result_gui, control_panel, ivi_standin] }
@@ -174,7 +174,7 @@ Verified against real Connext: each topic gets the intended QoS in every profile
 - Apps contain no QoS code. They create readers and writers with defaults and get the right behaviour for that topic from the XML. Changing behaviour means editing XML and restarting; nothing is rebuilt.
 - Choosing a variant from the Control Panel makes `node_agent` restart the app with that variant, because some QoS settings cannot change on a live entity.
 - `./protorig check` asks Connext for the effective QoS of every profile and applies the DDS request/offer rules:
-  - **ERROR** if any profile's readers of an external topic would not match what the external node offers (`external/<name>/external.yaml`). For the TC397 (best effort, no deadline, no liveliness lease), readers must not request RELIABLE, a finite deadline, a finite liveliness lease, a stronger durability, or different ownership.
+  - **ERROR** if any profile's readers of an external topic would not match what the external node offers (`external/<name>/external.yaml`). For the TC397 (reliable, volatile, no deadline, no liveliness lease), readers must not request a finite deadline, a finite liveliness lease, a stronger durability, or different ownership.
   - **ERROR** if the default writer for an external topic doesn't mirror the external node's offer, so sim twins behave like the hardware.
   - **ERROR** if our own topics' writer and reader don't match within a profile.
   - **WARN** if a variant only works when applied to every node at once (e.g. `Variant.Alert.BestEffort`: its best-effort writer can't feed default reliable readers).
@@ -190,7 +190,7 @@ These show up on screen in Admin Console, in front of customers, so they are par
 ### Topic names
 | Kind | Rule | Examples |
 |---|---|---|
-| Scenario data (what the demo is about) | Plain, meaningful names, no prefix | `Alert`, `TirePressure`, `BrakeCommand` |
+| Scenario data (what the demo is about) | Plain, meaningful names, no prefix | `Alert`, `CabinTemperature`, `BrakeCommand` |
 | Framework plumbing (behind the scenes) | `_sys/` prefix; the underscore sorts them away from scenario topics | `_sys/NodeStatus`, `_sys/DemoControl` |
 | External systems | Whatever the external system uses; cannot change without reflashing | `Example Temperature` (TC397) |
 

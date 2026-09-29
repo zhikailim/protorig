@@ -15,7 +15,7 @@ module alerts {
     @appendable
     struct Alert {
         @key string<64>  source;      // "<node>/<app>", e.g. "hpc-vm/hpc_monitor"
-        @key string<32>  alert_id;    // e.g. "LOW_PRESSURE_FL"
+        @key string<32>  alert_id;    // e.g. "TEMP_HIGH"
         Severity         severity;
         string<128>      message;     // human-readable, shown as is
         double           value;       // the reading that triggered it

@@ -3,7 +3,7 @@ fw.app — the standard way to write a Python protorig app (tooling or sim twin)
 
     from fw.app import App
 
-    app = App("tc397_twin", "Publishes fake tire pressure like the real TC397")
+    app = App("tc397_twin", "Publishes temperature like the real TC397")
     rate = app.arg("--rate", 10.0, "samples per second")
     out = app.writer("Example Temperature")
     app.every(1.0 / rate, lambda: out.write(...))

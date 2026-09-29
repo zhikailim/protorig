@@ -30,7 +30,7 @@ KNOWN_ARCH = {"x86_64", "aarch64", "armv7", "tricore"}
 @dataclass
 class Finding:
     severity: str
-    where: str        # e.g. "scenarios/tire-skeleton" or "apps/vehicle/foo"
+    where: str        # e.g. "scenarios/temp-skeleton" or "apps/vehicle/foo"
     message: str
 
     def __str__(self) -> str:
@@ -57,7 +57,7 @@ def check_scenarios() -> Iterator[Finding]:
     for s in repo.load_scenarios():
         where = f"scenarios/{s.name}"
         if not repo.SCENARIO_NAME.match(s.name):
-            yield Finding(ERROR, where, "folder name must be lowercase letters, digits and '-' (e.g. tire-skeleton)")
+            yield Finding(ERROR, where, "folder name must be lowercase letters, digits and '-' (e.g. temp-skeleton)")
         if s.error:
             yield Finding(ERROR, where, s.error)
             continue

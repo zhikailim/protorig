@@ -2,7 +2,7 @@
 
 The TC397's data types, copied **byte for byte** from the ETAS / Connext Micro project. They must match what is compiled into the firmware: type names, module nesting, member names and order, and extensibility. A mismatch doesn't raise an error; data just stops arriving.
 
-- `Temperature.idl` (includes `Header.idl`, which includes `Time.idl`): `sensor_msgs::msg::Temperature`, published on topic `Example Temperature`. The tire pressure is carried in the `temperature` field.
+- `Temperature.idl` (includes `Header.idl`, which includes `Time.idl`): `sensor_msgs::msg::Temperature`, published on topic `Example Temperature`. The `temperature` field is in degrees Celsius (ROS convention).
 - These are ROS 2 message definitions, but the topic name isn't ROS-mangled (`rt/...`), so this is plain DDS.
 - No extensibility annotation: Pro and Micro both use the rtiddsgen default (appendable). Keep it that way.
 

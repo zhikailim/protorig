@@ -1,4 +1,5 @@
-# What the TC397 puts on the wire, as its firmware is built today.
+# What the TC397 puts on the wire, as its firmware is built today
+# (confirmed from the application source, Temperature_publisher.c).
 #
 # This file is the machine-readable side of external/tc397/README.md. It lets
 # `protorig check` prove that no QoS profile or variant in qos/ would stop our
@@ -11,7 +12,7 @@ topics:
     type: sensor_msgs::msg::Temperature
     # QoS the ECU's DataWriter OFFERS. Readers may request the same or weaker.
     writer:
-      reliability: BEST_EFFORT      # known-good profile is based on Generic.BestEffort
+      reliability: RELIABLE         # Temperature_publisher.c: USE_RELIABLE_QOS is defined
       durability: VOLATILE
       deadline: infinite            # a reader requesting any finite deadline would NOT match
       liveliness_lease: infinite    # same for a finite liveliness lease

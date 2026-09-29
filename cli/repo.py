@@ -21,7 +21,7 @@ CONNEXT_VERSION = "7.7"
 # App kinds, in lookup order. The folder an app sits in decides its kind.
 APP_KINDS = ("vehicle", "tooling", "sim")
 
-SCENARIO_NAME = re.compile(r"^[a-z][a-z0-9-]*$")      # e.g. tire-skeleton
+SCENARIO_NAME = re.compile(r"^[a-z][a-z0-9-]*$")      # e.g. temp-skeleton
 APP_NAME = re.compile(r"^[a-z][a-z0-9_]*$")           # e.g. hpc_monitor
 NODE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")          # e.g. hpc-pi
 

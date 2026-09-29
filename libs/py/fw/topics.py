@@ -12,7 +12,7 @@ gets the _sys/ prefix; external systems keep whatever name they use.
 
 TOPICS = {
     # external systems (names fixed by their firmware)
-    "Example Temperature": "sensor_msgs::msg::Temperature",   # TC397 tire pressure
+    "Example Temperature": "sensor_msgs::msg::Temperature",   # TC397 temperature sensor
     # scenario data
     "Alert": "alerts::Alert",
     # framework plumbing

@@ -51,7 +51,7 @@ class Header:
 
 @idl.struct(type_annotations=[idl.type_name("sensor_msgs::msg::Temperature"), APPENDABLE])
 class Temperature:
-    """Published by the TC397 on "Example Temperature". Carries tire pressure."""
+    """Published by the TC397 on "Example Temperature": a temperature in degrees Celsius."""
     header: Header = field(default_factory=Header)
     temperature: float = 0.0     # IDL double
     variance: float = 0.0        # IDL double

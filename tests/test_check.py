@@ -326,7 +326,7 @@ def test_garbage_never_crashes(fake, raw):
 
 def test_launcher_help_and_list():
     out = subprocess.run([str(REPO / "protorig"), "list"], capture_output=True, text=True)
-    assert out.returncode == 0 and "tire-skeleton" in out.stdout
+    assert out.returncode == 0 and "temp-skeleton" in out.stdout
     out = subprocess.run([str(REPO / "protorig"), "--help"], capture_output=True, text=True)
     assert out.returncode == 0 and "check" in out.stdout
 

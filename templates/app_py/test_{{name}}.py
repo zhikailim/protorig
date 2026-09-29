@@ -39,7 +39,7 @@ def test_kill_command(bus, start_app):
 # --- behaviour tests: one per row of the given/when/then table -----------------
 # def test_B1_...(bus, start_app):
 #     out = bus.listen("Alert")                        # 1. listen first
-#     app = start_app("{{name}}", "--threshold", "28")
-#     bus.send("Example Temperature", {"temperature": 20.0})   # 2. act
+#     app = start_app("{{name}}", "--threshold", "14.5")
+#     bus.send("Example Temperature", {"temperature": 15.0})   # 2. act
 #     wait_for(lambda: out.count() > 0, 2, "an alert") # 3. check
-#     assert out.last().alert_id == "LOW_PRESSURE"
+#     assert out.last().alert_id == "TEMP_HIGH"

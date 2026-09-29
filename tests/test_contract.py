@@ -249,8 +249,6 @@ def test_corrupt_lock_is_reported(real):
 READER = '<datareader_qos topic_filter="Example Temperature">\n        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>'
 
 QOS_BREAKS = [
-    ("reliable reader of the ECU",
-     READER, READER.replace("BEST_EFFORT", "RELIABLE"), "reader wants RELIABLE"),
     ("finite deadline on ECU reader",
      READER, READER + "\n        <deadline><period><sec>1</sec><nanosec>0</nanosec></period></deadline>", "1 s deadline"),
     ("finite liveliness on ECU reader",
@@ -261,8 +259,8 @@ QOS_BREAKS = [
     ("exclusive ownership on ECU reader",
      READER, READER + "\n        <ownership><kind>EXCLUSIVE_OWNERSHIP_QOS</kind></ownership>", "ownership differs"),
     ("twin writer not mirroring the ECU",
-     '<datawriter_qos topic_filter="Example Temperature">\n        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind>',
-     '<datawriter_qos topic_filter="Example Temperature">\n        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind>', "must mirror what tc397 offers"),
+     '<datawriter_qos topic_filter="Example Temperature">\n        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind>',
+     '<datawriter_qos topic_filter="Example Temperature">\n        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind>', "must mirror what tc397 offers"),
     ("own topic mismatch",
      '<datawriter_qos topic_filter="Alert">\n        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind>',
      '<datawriter_qos topic_filter="Alert">\n        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind>', "'Alert' writer and reader don't match"),
@@ -280,18 +278,18 @@ def test_qos_break_is_caught(real, label, old, new, expected):
 
 
 def test_bad_variant_is_caught(real):
-    real.edit("qos/variants.xml", "</qos_library>", '''  <qos_profile name="Variant.TirePressure.Reliable" base_name="protorig::Topics">
+    real.edit("qos/variants.xml", "</qos_library>", '''  <qos_profile name="Variant.Temperature.LateJoiner" base_name="protorig::Topics">
       <datareader_qos topic_filter="Example Temperature">
-        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
       </datareader_qos>
     </qos_profile>
   </qos_library>''')
-    assert any("Variant.TirePressure.Reliable: readers of 'Example Temperature' would never match tc397" in e
+    assert any("Variant.Temperature.LateJoiner: readers of 'Example Temperature' would never match tc397" in e
                for e in real.errors())
 
 
 def test_variant_naming_warns(real):
-    real.edit("qos/variants.xml", 'name="Variant.TirePressure.LongHistory"', 'name="LongHistory"')
+    real.edit("qos/variants.xml", 'name="Variant.Temperature.LongHistory"', 'name="LongHistory"')
     assert any("should start with 'Variant.'" in w for w in real.warnings())
 
 
@@ -300,14 +298,17 @@ def test_xml_comment_with_double_dash(real):
     assert any("not valid XML" in e and "'--'" in e for e in real.errors())
 
 
-def test_ecu_offering_reliable_would_allow_reliable_reader(real):
-    """If the firmware changes to RELIABLE, a reliable reader becomes fine: the check follows external.yaml."""
-    real.edit("external/tc397/external.yaml", "reliability: BEST_EFFORT", "reliability: RELIABLE")
+def test_reliable_reader_matches_reliable_ecu(real):
+    """The ECU offers RELIABLE today, so a reliable reader is fine."""
     real.edit("qos/topics.xml", READER, READER.replace("BEST_EFFORT", "RELIABLE"))
-    real.edit("qos/topics.xml",
-              '<datawriter_qos topic_filter="Example Temperature">\n        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind>',
-              '<datawriter_qos topic_filter="Example Temperature">\n        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind>')
     assert not any("would never match" in e for e in real.errors())
+
+
+def test_ecu_going_best_effort_breaks_reliable_reader(real):
+    """If the firmware drops to BEST_EFFORT, a reliable reader never matches: the check follows external.yaml."""
+    real.edit("external/tc397/external.yaml", "reliability: RELIABLE", "reliability: BEST_EFFORT")
+    real.edit("qos/topics.xml", READER, READER.replace("BEST_EFFORT", "RELIABLE"))
+    assert any("reader wants RELIABLE" in e for e in real.errors())
 
 
 # --- LIVE: the checker's verdict must agree with real Connext ---------------------------------
@@ -397,8 +398,8 @@ def test_python_types_work_on_the_wire():
     p = dds.DomainParticipant(random.randint(150, 199))
     try:
         samples = {
-            "Alert": types.Alert(source="hpc-vm/hpc_monitor", alert_id="LOW_PRESSURE_FL",
-                                 severity=types.Severity.SEVERITY_WARNING, message="FL low", value=28.5),
+            "Alert": types.Alert(source="hpc-vm/hpc_monitor", alert_id="TEMP_HIGH",
+                                 severity=types.Severity.SEVERITY_WARNING, message="Temperature high", value=14.6),
             "_sys/NodeStatus": types.NodeStatus(node="hpc-pi", app="node_agent", os="linux", seq=7, cpu_load=0.25),
             "_sys/DemoControl": types.DemoControl(target_node="*", cmd_id=1, command=types.Command.CMD_KILL_APP,
                                                   target_app="hpc_monitor"),

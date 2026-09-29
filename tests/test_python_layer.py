@@ -29,11 +29,11 @@ seen = []
 app.on_param("rate", lambda v: print(f"PARAM rate={v}", flush=True))
 alerts = app.writer("Alert")
 inp = app.reader("Example Temperature")
-def on_tire(s):
+def on_temp(s):
     if s.temperature < 0:
-        raise RuntimeError("negative pressure, on purpose")
+        raise RuntimeError("below zero, on purpose")
     alerts.write(T.Alert(source=app.who, alert_id="ECHO", message="echo", value=s.temperature))
-app.on_data(inp, on_tire)
+app.on_data(inp, on_temp)
 sys.exit(app.run())
 '''
 
@@ -77,7 +77,7 @@ def test_callback_exception_does_not_kill_the_app(bus, start_app, probe_dir):
     bus.send("Example Temperature", {"temperature": 29.0})       # must still be handled
     wait_for(lambda: out.count() > 0, 3, "an alert after the error")
     assert not app.exited()
-    assert "negative pressure, on purpose" in app.output
+    assert "below zero, on purpose" in app.output
 
 
 def test_commands_for_others_are_ignored(bus, start_app, probe_dir):
@@ -129,8 +129,8 @@ def test_qos_variant_restart(bus, start_app, probe_dir):
     from fw.testing import wait_for
     beats = bus.listen("_sys/NodeStatus")
     app = _start(start_app, probe_dir)
-    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg="Variant.TirePressure.LongHistory")
-    wait_for(lambda: any(b.app == "probe" and b.qos_variant == "Variant.TirePressure.LongHistory"
+    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg="Variant.Temperature.LongHistory")
+    wait_for(lambda: any(b.app == "probe" and b.qos_variant == "Variant.Temperature.LongHistory"
                          for b in beats.all()), 10, "a heartbeat carrying the new variant")
     bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg="Variant.Does.Not.Exist")
     wait_for(lambda: "unknown QoS variant" in app.output, 3, "a warning for an unknown variant")
@@ -167,7 +167,7 @@ def test_help_lists_app_arguments(probe_dir):
 
 def test_domain_comes_from_scenario():
     from fw.app import scenario_domain
-    assert scenario_domain("tire-skeleton") == 0
+    assert scenario_domain("temp-skeleton") == 0
     assert scenario_domain("no-such-scenario") is None
 
 
@@ -246,7 +246,7 @@ def test_new_app_passes_check(repo_copy):
     (["new", "app", "x", "--kind", "vehicle"], "C/C++ apps arrive"),
     (["new", "app", "x", "--scenario", "nope"], "no scenario 'nope'"),
     (["new", "scenario", "Bad_Name"], "not a valid scenario name"),
-    (["new", "scenario", "tire-skeleton"], "already exists"),
+    (["new", "scenario", "temp-skeleton"], "already exists"),
 ])
 def test_new_refuses_bad_requests(repo_copy, args, expected):
     out = _protorig(repo_copy, *args)
@@ -267,5 +267,5 @@ def test_new_scenario_is_valid_apart_from_unbuilt_apps(repo_copy):
 
 
 def test_scenario_local_app(repo_copy):
-    assert _protorig(repo_copy, "new", "app", "only_here", "--scenario", "tire-skeleton").returncode == 0
-    assert (repo_copy / "scenarios" / "tire-skeleton" / "apps" / "tooling" / "only_here" / "main.py").exists()
+    assert _protorig(repo_copy, "new", "app", "only_here", "--scenario", "temp-skeleton").returncode == 0
+    assert (repo_copy / "scenarios" / "temp-skeleton" / "apps" / "tooling" / "only_here" / "main.py").exists()

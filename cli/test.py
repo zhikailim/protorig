@@ -46,7 +46,8 @@ def main(args) -> int:
     else:
         paths = [str(p) for p in (repo.ROOT / "tests", repo.ROOT / "apps", repo.ROOT / "scenarios") if p.is_dir()]
 
-    cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(repo.ROOT), *paths]
+    cmd = [sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider",   # -rs: say why tests were skipped
+           "--rootdir", str(repo.ROOT), *paths]
     if args.k:
         cmd += ["-k", args.k]
     rc = subprocess.call(cmd, cwd=repo.ROOT)

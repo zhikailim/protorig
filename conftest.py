@@ -23,15 +23,32 @@ sys.path.insert(0, str(ROOT / "libs" / "py"))
 collect_ignore_glob = ["templates/*", "build/*", ".venv/*"]
 
 
+def _find_license() -> str | None:
+    """RTI_LICENSE_FILE if set, else rti_license.dat in .local/ (git-ignored), the
+    home folder or the current folder. A file found is exported as
+    RTI_LICENSE_FILE, so the apps the tests start (child processes) find it too."""
+    if os.environ.get("RTI_LICENSE_FILE"):
+        return os.environ["RTI_LICENSE_FILE"]
+    for folder in (ROOT / ".local", Path.home(), Path.cwd()):
+        f = folder / "rti_license.dat"
+        if f.exists():
+            os.environ["RTI_LICENSE_FILE"] = str(f)
+            return str(f)
+    return None
+
+
 def _skip_reason() -> str | None:
     try:
         import rti.connextdds  # noqa: F401
     except ImportError:
         return "needs the Connext Python package (run bootstrap)"
-    if not (os.environ.get("RTI_LICENSE_FILE")
-            or any((p / "rti_license.dat").exists() for p in (Path.cwd(), Path.home(), ROOT / ".local"))):
-        return "needs a Connext license (set RTI_LICENSE_FILE)"
+    if _find_license() is None:
+        return ("needs a Connext license: put rti_license.dat in the repo's .local/ folder "
+                "(git-ignored), or set RTI_LICENSE_FILE")
     return None
+
+
+_find_license()          # before any test creates a participant
 
 
 @pytest.fixture(scope="session")

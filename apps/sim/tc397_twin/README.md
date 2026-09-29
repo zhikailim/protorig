@@ -45,4 +45,4 @@ Source of truth: the TC397 application source (`TASK(DDS_Subscriber_task)`) and 
 
 ## Used in scenarios
 
-- `temp-skeleton` (as `sim:` for node `tc397`)
+- `temperature-skeleton` (as `sim:` for node `tc397`)

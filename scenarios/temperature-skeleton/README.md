@@ -1,4 +1,4 @@
-# temp-skeleton
+# temperature-skeleton
 
 The walking skeleton: the thinnest slice that touches every real piece of hardware, with almost no demo logic. Its job is to prove the plumbing before any real scenario is built on this rig.
 

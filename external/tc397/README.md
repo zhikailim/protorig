@@ -26,7 +26,7 @@ The temperature only advances after a successful write, but the stamp advances e
 
 ## Rig risks (read before bring-up)
 
-1. **At most 5 remote participants.** The ECU can track only 5 other participants. `temp-skeleton` has about 7 (2 per HPC, 3 on Windows). Participants beyond the fifth may never see the ECU's data. Options: raise the allocation in the firmware, or run fewer apps that read the ECU.
+1. **At most 5 remote participants.** The ECU can track only 5 other participants. `temperature-skeleton` has about 7 (2 per HPC, 3 on Windows). Participants beyond the fifth may never see the ECU's data. Options: raise the allocation in the firmware, or run fewer apps that read the ECU.
 2. **The ECU announces itself only to Windows (.102).** The VM and Pi find the ECU only if *they* list it as an initial peer (they do, via the scenario) and the ECU accepts them. Unproven: the 15-minute `rtiddsspy` smoke test from the VM answers it.
 
 ## Files

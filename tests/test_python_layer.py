@@ -250,7 +250,7 @@ def test_help_lists_app_arguments(probe_dir):
 
 def test_domain_comes_from_scenario():
     from fw.app import scenario_domain
-    assert scenario_domain("temp-skeleton") == 0
+    assert scenario_domain("temperature-skeleton") == 0
     assert scenario_domain("no-such-scenario") is None
 
 
@@ -329,7 +329,7 @@ def test_new_app_passes_check(repo_copy):
     (["new", "app", "x", "--kind", "vehicle"], "C/C++ apps arrive"),
     (["new", "app", "x", "--scenario", "nope"], "no scenario 'nope'"),
     (["new", "scenario", "Bad_Name"], "not a valid scenario name"),
-    (["new", "scenario", "temp-skeleton"], "already exists"),
+    (["new", "scenario", "temperature-skeleton"], "already exists"),
 ])
 def test_new_refuses_bad_requests(repo_copy, args, expected):
     out = _protorig(repo_copy, *args)
@@ -350,5 +350,5 @@ def test_new_scenario_is_valid_apart_from_unbuilt_apps(repo_copy):
 
 
 def test_scenario_local_app(repo_copy):
-    assert _protorig(repo_copy, "new", "app", "only_here", "--scenario", "temp-skeleton").returncode == 0
-    assert (repo_copy / "scenarios" / "temp-skeleton" / "apps" / "tooling" / "only_here" / "main.py").exists()
+    assert _protorig(repo_copy, "new", "app", "only_here", "--scenario", "temperature-skeleton").returncode == 0
+    assert (repo_copy / "scenarios" / "temperature-skeleton" / "apps" / "tooling" / "only_here" / "main.py").exists()

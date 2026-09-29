@@ -42,7 +42,7 @@ scenarios/<name>/
 `scenario.yaml`:
 
 ```yaml
-name: temp-skeleton
+name: temperature-skeleton
 description: HPC failover with over-temperature alerts
 domain: 0
 nodes:

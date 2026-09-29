@@ -330,7 +330,7 @@ LAUNCHER = str(REPO / ("protorig.cmd" if os.name == "nt" else "protorig"))
 
 def test_launcher_help_and_list():
     out = subprocess.run([LAUNCHER, "list"], capture_output=True, text=True)
-    assert out.returncode == 0 and "temp-skeleton" in out.stdout
+    assert out.returncode == 0 and "temperature-skeleton" in out.stdout
     out = subprocess.run([LAUNCHER, "--help"], capture_output=True, text=True)
     assert out.returncode == 0 and "check" in out.stdout
 

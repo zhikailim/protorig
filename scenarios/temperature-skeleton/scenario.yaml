@@ -1,6 +1,6 @@
-# temp-skeleton: the walking skeleton for the rig.
+# temperature-skeleton: the walking skeleton for the rig.
 # Proves the plumbing end to end on real hardware, with almost no demo logic.
-name: temp-skeleton
+name: temperature-skeleton
 description: Walking skeleton - TC397 temperature to two HPCs, alerts on Windows
 domain: 0            # confirmed from the TC397 source (publisher_main_w_args(0, ...))
 

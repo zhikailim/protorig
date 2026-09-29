@@ -227,7 +227,7 @@ def check_hygiene() -> Iterator[Finding]:
         tracked = subprocess.run(["git", "-C", str(repo.ROOT), "ls-files"], capture_output=True,
                                  text=True, check=True).stdout.splitlines()
     except (OSError, subprocess.CalledProcessError):
-        tracked = [str(p.relative_to(repo.ROOT)) for p in repo.ROOT.rglob("*")
+        tracked = [p.relative_to(repo.ROOT).as_posix() for p in repo.ROOT.rglob("*")
                    if p.is_file() and ".git" not in p.parts]
     for f in tracked:
         low = f.lower()

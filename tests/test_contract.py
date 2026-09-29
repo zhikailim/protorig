@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "cli"))
@@ -221,8 +222,30 @@ def test_new_idl_not_in_lock_warns(real):
 def test_lock_add_common_idl_is_kept_on_relock(real):
     assert real.lock(add=["interfaces/common/alerts.idl"]) == 0
     assert real.lock() == 0                                      # relock without --add
-    text = (real.root / "external/tc397/flashed.lock").read_text()
+    text = (real.root / "external/tc397/flashed.lock").read_text(encoding="utf-8")
     assert "interfaces/common/alerts.idl" in text
+
+
+def test_lock_paths_use_forward_slashes(real):
+    """Lock files are shared by every OS in the rig: paths are stored with "/"."""
+    real.lock(add=["interfaces/common/alerts.idl"])
+    data = yaml.safe_load((real.root / "external/tc397/flashed.lock").read_text(encoding="utf-8"))
+    assert data["files"] and all("\\" not in k and "/" in k for k in data["files"])
+
+
+def test_lock_written_with_backslashes_still_works(real):
+    """A lock written by an older version on Windows (paths with "\\") is still
+    understood: check finds no drift, and relocking converts it to "/"."""
+    real.lock(add=["interfaces/common/alerts.idl"])
+    f = real.root / "external/tc397/flashed.lock"
+    data = yaml.safe_load(f.read_text(encoding="utf-8"))
+    data["files"] = {k.replace("/", "\\"): v for k, v in data["files"].items()}
+    f.write_text(yaml.safe_dump(data), encoding="utf-8")
+    assert not any("tc397" in w and ("changed" in w or "not in the flash lock" in w) for w in real.warnings())
+    assert not any("no longer exists" in e for e in real.errors())
+    assert real.lock() == 0
+    files = yaml.safe_load(f.read_text(encoding="utf-8"))["files"]
+    assert "interfaces/common/alerts.idl" in files and not any("\\" in k for k in files)
 
 
 def test_lock_add_outside_repo_is_refused(real):

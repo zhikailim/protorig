@@ -32,17 +32,19 @@ def files_to_lock(name: str, add: list[str]) -> tuple[list[str], list[str]]:
     """(files, problems) — repo-relative paths to lock, and anything wrong with the request."""
     problems, files = [], set()
     idl_dir = repo.ROOT / "interfaces" / "external" / name
-    files.update(str(p.relative_to(repo.ROOT)) for p in idl_dir.glob("*.idl"))
+    # Paths are stored with "/" on every OS, so a lock made on Windows is valid on Linux too.
+    files.update(p.relative_to(repo.ROOT).as_posix() for p in idl_dir.glob("*.idl"))
     old = lock_path(name)
     if old.exists():
         try:
-            files.update((yaml.safe_load(old.read_text(encoding="utf-8")) or {}).get("files", {}))
+            old_files = (yaml.safe_load(old.read_text(encoding="utf-8")) or {}).get("files", {})
+            files.update(k.replace("\\", "/") for k in old_files)     # older Windows locks used "\\"
         except yaml.YAMLError:
             problems.append(f"{old.relative_to(repo.ROOT)} is unreadable; it will be rewritten")
     for a in add:
         p = (repo.ROOT / a).resolve()
         try:
-            r = str(p.relative_to(repo.ROOT))
+            r = p.relative_to(repo.ROOT).as_posix()
         except ValueError:
             problems.append(f"{a}: outside the repo")
             continue

@@ -6,6 +6,7 @@ asserts that check reports it (and nothing unrelated). A clean repo must pass.
 
 Run:  python -m pytest -q tests/
 """
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -324,21 +325,24 @@ def test_garbage_never_crashes(fake, raw):
 
 # --- end to end: the real launcher on the real repo ---------------------------------
 
+# The launcher for this OS: Windows can't run the bash script `protorig` directly.
+LAUNCHER = str(REPO / ("protorig.cmd" if os.name == "nt" else "protorig"))
+
 def test_launcher_help_and_list():
-    out = subprocess.run([str(REPO / "protorig"), "list"], capture_output=True, text=True)
+    out = subprocess.run([LAUNCHER, "list"], capture_output=True, text=True)
     assert out.returncode == 0 and "temp-skeleton" in out.stdout
-    out = subprocess.run([str(REPO / "protorig"), "--help"], capture_output=True, text=True)
+    out = subprocess.run([LAUNCHER, "--help"], capture_output=True, text=True)
     assert out.returncode == 0 and "check" in out.stdout
 
 
 def test_launcher_check_exit_code_matches_findings():
-    out = subprocess.run([str(REPO / "protorig"), "check"], capture_output=True, text=True)
+    out = subprocess.run([LAUNCHER, "check"], capture_output=True, text=True)
     has_errors = "error(s)" in out.stdout
     assert out.returncode == (1 if has_errors else 0), out.stdout
 
 
 def test_planned_verb_says_not_built():
-    out = subprocess.run([str(REPO / "protorig"), "deploy", "hpc-pi"], capture_output=True, text=True)
+    out = subprocess.run([LAUNCHER, "deploy", "hpc-pi"], capture_output=True, text=True)
     assert out.returncode == 3 and "not built yet" in out.stdout
 
 

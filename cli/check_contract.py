@@ -33,7 +33,8 @@ VARIANT_LIBRARY = "protorig_variants"
 # ---------------------------------------------------------------------------
 
 def rel(p: Path) -> str:
-    return str(p.relative_to(repo.ROOT))
+    """Repo-relative path with "/" on every OS (the form stored in lock files)."""
+    return p.relative_to(repo.ROOT).as_posix()
 
 
 def load_idl() -> tuple[dict, dict, list[Finding]]:
@@ -338,6 +339,7 @@ def check_externals() -> Iterator[Finding]:
         except (yaml.YAMLError, AttributeError):
             yield Finding(ERROR, rel(lock), "unreadable; regenerate it with `protorig lock`")
             continue
+        files = {k.replace("\\", "/"): v for k, v in files.items()}     # older Windows locks used "\\"
         for path, digest in files.items():
             p = repo.ROOT / path
             if not p.exists():

@@ -17,7 +17,7 @@ Publishes a temperature ramp (the existing sample application, `Temperature_publ
 | Data: `temperature` | Ramp 10.0 → 15.0 °C in 0.1 steps, then wraps to 10.0 (about 5 s per cycle at 10 Hz) | `deci_celsius / 10.0` |
 | Data: `variance` | Always 0.1 | publisher source |
 | Data: `header.frame_id` | Always `"sensor_frame"` | publisher source |
-| Data: `header.stamp` | Starts at 0 and advances 100 ms per task run (not wall-clock time) | publisher source |
+| Data: `header.stamp` | First sample 0.100 s, then +100 ms per task run, even when a write fails (not wall-clock time; resets with the board) | publisher source |
 | Rate | 10 Hz, assuming the OS task runs every 100 ms (the stamp step suggests so) | **To confirm** in the OS configuration |
 | Limits | `remote_participant_allocation = 5`, `max_message_size = 1400` | publisher source |
 

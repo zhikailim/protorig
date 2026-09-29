@@ -15,7 +15,21 @@ import sys
 import repo
 
 
+SETUP_HINT = (
+    "Set up the repo's Python once, from the repo root:\n"
+    "  Windows:     py -3 -m venv .venv ; .\\.venv\\Scripts\\python -m pip install -r bootstrap\\requirements.txt\n"
+    "  Linux/macOS: python3 -m venv .venv && .venv/bin/python -m pip install -r bootstrap/requirements.txt\n"
+    "The protorig launcher uses .venv automatically once it exists."
+)
+
+
 def main(args) -> int:
+    import importlib.util
+    missing = [m for m in ("pytest", "yaml", "rti.connextdds")
+               if importlib.util.find_spec(m.split(".")[0]) is None]
+    if missing:
+        print(f"protorig test: this Python ({sys.executable}) lacks: {', '.join(missing)}\n{SETUP_HINT}")
+        return 2
     import check
     results = check.run_checks()
     errors = sum(1 for _, fs in results for f in fs if f.severity == check.ERROR)

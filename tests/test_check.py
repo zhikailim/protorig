@@ -340,3 +340,16 @@ def test_launcher_check_exit_code_matches_findings():
 def test_planned_verb_says_not_built():
     out = subprocess.run([str(REPO / "protorig"), "deploy", "hpc-pi"], capture_output=True, text=True)
     assert out.returncode == 3 and "not built yet" in out.stdout
+
+
+def test_test_command_explains_missing_packages(monkeypatch, capsys):
+    """`protorig test` on a Python without pytest says how to set up .venv, instead of a bare error."""
+    import importlib.util
+    import types
+    import test as test_cmd
+    real = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda m, *a: None if m == "pytest" else real(m, *a))
+    monkeypatch.setattr(test_cmd.subprocess, "call", lambda *a, **k: 0)   # if the guard is missing: fail fast, don't recurse
+    assert test_cmd.main(types.SimpleNamespace(apps=[], k=None)) == 2
+    out = capsys.readouterr().out
+    assert "lacks: pytest" in out and "-m venv .venv" in out

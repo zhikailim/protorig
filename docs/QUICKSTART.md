@@ -158,6 +158,44 @@ nodes:
   tc397:   { ip: 172.23.100.101, external: true, sim: tc397_twin }
 ```
 
+**System topology**
+
+```mermaid
+flowchart TB
+    ecu["tc397 · 172.23.100.101<br/>external: own firmware, no agent"]
+    subgraph win["windows · 172.23.100.102"]
+        live["run --live"]
+        cp["control_panel"]
+        wa["node_agent"]
+        rg["result_gui"]
+        ivi["ivi_standin"]
+    end
+    dds(["DDS domain 0 · one managed switch"])
+    subgraph vm["hpc-vm · 172.23.100.110"]
+        va["node_agent"]
+        sf1["sensor_fusion --role primary"]
+        pp["path_planner"]
+        lg1["logger --dir /data"]
+    end
+    subgraph pi["hpc-pi · 172.23.100.121"]
+        pa["node_agent"]
+        sf2["sensor_fusion --role backup"]
+        bc["brake_controller"]
+        lg2["logger --dir /home/pi/logs"]
+    end
+
+    live & cp -- "commands" --> dds
+    dds -- "commands" --> wa & va & pa
+    wa -.-> rg & ivi & cp
+    va -.-> sf1 & pp & lg1
+    pa -.-> sf2 & bc & lg2
+    ecu -- "sensor data" --> dds
+    vm & pi -- "data, heartbeats, app states" --> dds
+    dds -- "status for the node board" --> rg
+```
+
+Every machine talks only through DDS; nothing starts processes on another machine. Commands from `run --live` or the Control Panel reach each machine's `node_agent`, which starts (dotted arrows) only the apps in its own `run:` list. The apps and the TC397 publish their data, heartbeats and states on the same domain, and `result_gui` shows the whole rig. (The diagram renders on GitHub, and in VS Code's Markdown preview with the recommended Mermaid extension.)
+
 **What each agent reads: its own row, nothing else**
 
 | Agent | May start (with exactly these arguments) |

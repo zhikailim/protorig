@@ -411,10 +411,27 @@ scenarios/<name>/test_<name>.py     # each scenario, from its README's acceptanc
 - Pattern: **listen before acting** (`listen` → `send` → `wait_for` → `assert`); otherwise samples written before the reader exists are missed, and the test passes or fails for the wrong reason (e.g. only because of a history QoS).
 
 ### What's built (Python)
-- `libs/py/fw/app.py` (`fw.App`): standard args; domain from `--domain` or the scenario; QoS loaded as the file list, `--qos-variant` selects a `Variant.*` profile; participant `<node>/<app>`; `reader(topic)` / `writer(topic)` by name (types from `fw/topics.py`, QoS from `qos/`); `on_data`, `every` (returns a Timer whose `.period` can change live), `run`; 1 Hz heartbeat (`heartbeat=False` for sim twins of external nodes that send none); `participant_qos=fn` adjusts the participant QoS before creation; logs the liveliness lease in effect at start-up; obeys `_sys/DemoControl` addressed to it (`target_app` = its name, `target_node` = its node or `*`): stop (exit 0), kill (exit 137), switch QoS variant (restarts itself), set a parameter declared with `app.arg` (with `on_param` callbacks; non-finite values rejected). Node-level commands (`target_app` empty) are left to `node_agent`. Logs incompatible-QoS events with the policy (e.g. `Durability`). Errors in callbacks are logged, never fatal. `--help` lists app arguments too; unknown arguments exit 2.
-- `libs/py/fw/testing.py`: `Bus` (isolated domain 150-199, repo QoS), `send`, `listen` / `Mailbox`, `collect`, `command`, `make_sample`, `wait_for`, `AppLauncher` / `RunningApp` (`start_app(name, *args, node=, folder=)`, waits for the first heartbeat, or with `wait_heartbeat=False` for the `running` log line; `.output`, `.wait_exit`, `.interrupt`, `.terminate`).
+- `libs/py/fw/app.py` (`fw.App`): standard args; domain from `--domain` or the scenario; QoS loaded as the file list, `--qos-variant` selects a `Variant.*` profile; participant `<node>/<app>`; `reader(topic)` / `writer(topic)` by name (types from `fw/topics.py`, QoS from `qos/`); `on_data`, `every` (returns a Timer whose `.period` can change live), `run`; 1 Hz heartbeat (`heartbeat=False` for sim twins of external nodes that send none); `participant_qos=fn` adjusts the participant QoS before creation; logs the liveliness lease in effect at start-up; obeys `_sys/DemoControl` addressed to it (`target_app` = its name, `target_node` = its node or `*`): stop (exit 0), kill (exit 137), switch QoS variant (asks its launcher to restart it: see *Switching QoS variant* below), set a parameter declared with `app.arg` (with `on_param` callbacks; non-finite values rejected). `obeys=` limits which commands an app obeys (a sim twin obeys only what its real node could). Node-level commands (`target_app` empty) are left to `node_agent`. Logs incompatible-QoS events with the policy (e.g. `Durability`). Errors in callbacks are logged, never fatal. `--help` lists app arguments too; unknown arguments exit 2.
+- `libs/py/fw/supervise.py`: the restart rules every launcher follows (below). Pure decisions, no processes, so the test harness, `protorig run` and `node_agent` behave identically.
+- `libs/py/fw/testing.py`: `Bus` (isolated domain 150-199, repo QoS), `send`, `listen` / `Mailbox`, `collect`, `command`, `make_sample`, `wait_for`, `AppLauncher` / `RunningApp` (`start_app(name, *args, node=, folder=, supervised=, env=)`; restarts the app on a variant switch like `node_agent` will, keeping one handle (`.restarts` counts them); waits for the first heartbeat, or with `wait_heartbeat=False` for the `running` log line; `.output`, `.wait_exit`, `.interrupt`, `.terminate`).
 - Root `conftest.py`: fixtures `bus` (session) and `start_app` (stops every app it started). Skips with the reason when Connext or a license is missing.
 - `./protorig test [app ...] [-k expr]`: runs check, then pytest on `tests/`, `apps/`, `scenarios/` (or the named apps). Non-zero if either fails.
+
+#### Switching QoS variant (rules S1–S7)
+
+New QoS for immutable policies means new DDS entities, so the app has to restart. An app can't restart itself portably (Windows has no real `exec`), so it asks its **launcher**, which is always on the same machine (`node_agent` on the rig, `protorig run` on a desk, the test harness in tests). Nothing crosses the network except the DDS command and the heartbeat. The protocol is language-neutral, so C/C++ apps follow it too.
+
+| # | Rule |
+|---|---|
+| S1 | On `CMD_SET_QOS_VARIANT`: the variant already in use is ignored; an unknown one is ignored with a warning; otherwise the app writes a note naming the new variant (`""` = default), closes DDS and exits **75**. |
+| S2 | The launcher gives the app the note's path in `PROTORIG_RESTART_FILE`, one path per app. |
+| S3 | No `PROTORIG_RESTART_FILE` (started by hand): the app refuses the switch and stays up, saying how to restart it. |
+| S4 | On exit 75 the launcher reads (and deletes) the note and starts the app again with `--qos-variant` replaced. Other exit codes: the app has ended. |
+| S5 | The test harness does this transparently: one handle, output of every run kept. |
+| S6 | A failed switch leaves the app on the variant it had: checks run before anything is closed (a); if the new variant dies within 5 s the launcher rolls back once (b), and gives up if the rollback dies too (c); a missing note means restart unchanged (d). |
+| S7 | Known limit: if the launcher itself died, a switch takes the app down. The node board shows the dead `node_agent`. |
+
+Every heartbeat carries the variant actually in effect, so the Control Panel shows what happened, not what it asked for.
 
 ### Helpers (`fw/testing.py`)
 | Group | Helpers |

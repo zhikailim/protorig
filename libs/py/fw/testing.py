@@ -34,6 +34,7 @@ import random
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import typing
@@ -208,41 +209,86 @@ def find_app(name: str) -> tuple[str, Path]:
 
 
 class RunningApp:
-    """An app process started by a test. Its output is collected in .lines."""
+    """An app started by a test, supervised like node_agent will: when it exits
+    asking for a restart (QoS variant switch), it is started again by the rules
+    in fw/supervise.py. The test keeps this one handle across restarts.
 
-    def __init__(self, name: str, node: str, proc: subprocess.Popen):
-        self.name, self.node, self.proc = name, node, proc
+    .lines / .output   everything the app printed, across restarts, plus
+                       "[launcher] ..." lines saying what the launcher did
+    .proc              the current process
+    .exited()          True once the app has ended for good (not during a restart)
+    """
+
+    def __init__(self, name: str, node: str, cmd: list[str], args: list[str], env: dict,
+                 note: Path | None):
+        self.name, self.node = name, node
+        self._cmd, self._args, self._env, self._note = cmd, list(args), env, note
         self.lines: list[str] = []
-        self._reader = threading.Thread(target=self._read, daemon=True)
-        self._reader.start()
+        self.restarts = 0
+        self._stopping = False
+        self._ended = threading.Event()
+        self._lock = threading.Lock()
+        self.returncode: int | None = None
+        self.proc = self._spawn(self._args)
+        threading.Thread(target=self._supervise, daemon=True).start()
 
-    def _read(self):
-        for line in self.proc.stdout:
+    def _spawn(self, args: list[str]) -> subprocess.Popen:
+        proc = subprocess.Popen(self._cmd + args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, env=self._env)
+        threading.Thread(target=self._read, args=(proc,), daemon=True).start()
+        return proc
+
+    def _read(self, proc):
+        for line in proc.stdout:
             self.lines.append(line.rstrip("\n"))
+
+    def _supervise(self):
+        from fw.supervise import after_exit
+        args, phase, previous = self._args, "normal", None
+        while True:
+            started = time.monotonic()
+            code = self.proc.wait()
+            with self._lock:
+                if self._stopping or self._note is None:     # stopped by the test, or unsupervised
+                    break
+                d = after_exit(code, time.monotonic() - started, args, phase, previous, self._note)
+                if d.message:
+                    self.lines.append(f"[launcher] {d.message}")
+                if not d.restart:
+                    break
+                previous = args if d.phase == "switched" else previous
+                args, phase = d.args, d.phase
+                self.restarts += 1
+                self.proc = self._spawn(args)
+        self.returncode = code
+        self._ended.set()
 
     @property
     def output(self) -> str:
         return "\n".join(self.lines)
 
     def exited(self) -> bool:
-        return self.proc.poll() is not None
+        return self._ended.is_set()
 
     def wait_exit(self, timeout: float = 5.0) -> int:
-        try:
-            return self.proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
+        if not self._ended.wait(timeout):
             raise AssertionError(f"{self.name} did not exit within {timeout}s\n--- output ---\n{self.output}")
+        return self.returncode
 
     def terminate(self) -> int | None:
-        """Polite stop (SIGTERM, or kill on Windows), then force after 5 s."""
-        if self.exited():
-            return self.proc.returncode
-        self.proc.terminate()
-        try:
-            return self.proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            self.proc.kill()
-            return self.proc.wait(timeout=5)
+        """Polite stop (SIGTERM, or kill on Windows), then force after 5 s. No restart."""
+        with self._lock:
+            self._stopping = True
+            proc = self.proc
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+        self._ended.wait(5)
+        return self.returncode
 
     def interrupt(self) -> None:
         """Ctrl-C (SIGINT); on Windows falls back to terminate()."""
@@ -260,12 +306,17 @@ class AppLauncher:
         self.running: list[RunningApp] = []
 
     def __call__(self, name: str, *args: str, node: str = "test-node", folder: Path | None = None,
-                 wait_heartbeat: bool = True, timeout: float = 10.0) -> RunningApp:
+                 wait_heartbeat: bool = True, timeout: float = 10.0, supervised: bool = True,
+                 env: dict | None = None) -> RunningApp:
         """Start app `name` (found in the repo, or in `folder` if given) on the bus's domain.
 
         Waits until it is ready: its first heartbeat, or with wait_heartbeat=False
         (apps without one, e.g. sim twins) its "running" log line. Raises if it
-        exits during start-up, unless wait_heartbeat=False (tests of start-up errors)."""
+        exits during start-up, unless wait_heartbeat=False (tests of start-up errors).
+        supervised=False starts it like a person would by hand: no launcher to
+        restart it (so it refuses QoS variant switches, rule S3).
+        env: extra environment variables for the app."""
+        from fw.supervise import RESTART_ENV
         if folder is None:
             _, folder = find_app(name)
         folder = Path(folder)
@@ -273,12 +324,17 @@ class AppLauncher:
             cmd = [sys.executable, str(folder / "main.py")]
         else:
             raise NotImplementedError(f"{name}: C/C++ apps are started from build/ once `protorig build` exists")
-        env = dict(os.environ)
-        env["PYTHONPATH"] = str(ROOT / "libs" / "py") + os.pathsep + env.get("PYTHONPATH", "")
-        env["PYTHONUNBUFFERED"] = "1"
-        proc = subprocess.Popen(cmd + ["--node", node, "--domain", str(self.bus.domain), *args],
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
-        app = RunningApp(name, node, proc)
+        full_env = dict(os.environ)
+        full_env["PYTHONPATH"] = str(ROOT / "libs" / "py") + os.pathsep + full_env.get("PYTHONPATH", "")
+        full_env["PYTHONUNBUFFERED"] = "1"
+        full_env.pop(RESTART_ENV, None)
+        note = None
+        if supervised:
+            note = Path(tempfile.mkdtemp(prefix=f"protorig-{name}-")) / "restart.note"
+            full_env[RESTART_ENV] = str(note)
+        full_env.update(env or {})
+        app = RunningApp(name, node, cmd, ["--node", node, "--domain", str(self.bus.domain), *args],
+                         full_env, note)
         self.running.append(app)
         if wait_heartbeat:
             beats = self.bus.listen("_sys/NodeStatus")
@@ -288,7 +344,7 @@ class AppLauncher:
             finally:
                 beats.close()
             if app.exited():
-                raise AssertionError(f"{name} exited during start-up (code {app.proc.returncode})\n"
+                raise AssertionError(f"{name} exited during start-up (code {app.returncode})\n"
                                      f"--- output ---\n{app.output}")
         else:
             wait_for(lambda: any(l.endswith(" running") for l in app.lines) or app.exited(),

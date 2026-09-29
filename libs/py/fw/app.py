@@ -20,7 +20,11 @@ What App does for you, so apps contain only their own logic:
   - a 1 Hz heartbeat on _sys/NodeStatus (heartbeat=False turns it off: sim twins
     of external nodes, which must not publish anything the real node doesn't)
   - obeys _sys/DemoControl addressed to this app: stop, kill, switch QoS
-    variant (restarts itself), set a parameter
+    variant, set a parameter (obeys=... limits which; a sim twin obeys only
+    what its real node could). A variant switch needs new DDS entities, so the
+    app asks its launcher to restart it (exit 75 + a note; rules in
+    fw/supervise.py). Started by hand, with no launcher, it refuses the switch
+    and stays up.
   - logs incompatible-QoS events: when a reader and writer refuse to match,
     you see why instead of silence
   - clean shutdown on Ctrl-C / SIGTERM (the participant leaves discovery)
@@ -46,6 +50,7 @@ import rti.connextdds as dds
 import yaml
 
 from fw import topics as fw_topics
+from fw.supervise import EXIT_KILLED, EXIT_RESTART, RESTART_ENV
 from fw import types as T
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -53,7 +58,7 @@ QOS_FILES = ("base.xml", "topics.xml", "variants.xml")
 DEFAULT_PROFILE = "protorig::Topics"
 VARIANT_LIBRARY = "protorig_variants"
 HEARTBEAT_PERIOD = 1.0
-EXIT_KILLED = 137          # exit code used for CMD_KILL_APP (like SIGKILL)
+ALL_COMMANDS = frozenset(T.Command)
 
 
 def log(who: str, level: str, msg: str) -> None:
@@ -98,9 +103,11 @@ class _NoDDS:
 class App:
     def __init__(self, name: str, description: str = "", argv: list[str] | None = None,
                  heartbeat: bool = True,
-                 participant_qos: Callable[[dds.DomainParticipantQos], None] | None = None):
+                 participant_qos: Callable[[dds.DomainParticipantQos], None] | None = None,
+                 obeys: frozenset | set = ALL_COMMANDS):
         self.name = name
         self.heartbeat = heartbeat
+        self.obeys = frozenset(obeys)
         self._argv = list(sys.argv[1:] if argv is None else argv)
         self._parser = argparse.ArgumentParser(prog=name, description=description, add_help=False)
         self._parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
@@ -281,6 +288,10 @@ class App:
             return
         self._seen_cmds.add(c.cmd_id)
         cmd = c.command
+        if cmd not in self.obeys:
+            log(self.who, "INFO", f"ignoring {cmd.name}: this app obeys only "
+                                  f"{', '.join(sorted(k.name for k in self.obeys)) or 'nothing'}")
+            return
         if cmd == T.Command.CMD_STOP_APP:
             self.stop("stop command")
         elif cmd == T.Command.CMD_KILL_APP:
@@ -313,27 +324,39 @@ class App:
                 log(self.who, "ERROR", f"in on_param({name}):\n{traceback.format_exc()}")
 
     def _restart_with_variant(self, variant: str) -> None:
-        known = list(self.provider.qos_profiles(VARIANT_LIBRARY)) if variant else []
-        if variant and variant not in known:
+        """S1-S7 (fw/supervise.py). Every check happens BEFORE anything is closed,
+        so a switch that can't happen leaves the app running as it was."""
+        if variant == self.qos_variant:                                       # S1: nothing to do
+            log(self.who, "INFO", f"already using QoS variant '{variant or 'default'}'")
+            return
+        known = list(self.provider.qos_profiles(VARIANT_LIBRARY))
+        if variant and variant not in known:                                  # S1: unknown
             log(self.who, "WARN", f"unknown QoS variant '{variant}' (known: {', '.join(known) or 'none'})")
             return
-        log(self.who, "INFO", f"switching QoS variant to '{variant or 'default'}': restarting")
-        argv, skip = [], False
-        for a in self._argv:                        # drop any previous --qos-variant
-            if skip:
-                skip = False
-                continue
-            if a == "--qos-variant":
-                skip = True
-                continue
-            if a.startswith("--qos-variant="):
-                continue
-            argv.append(a)
-        if variant:
-            argv += ["--qos-variant", variant]
-        self._close()
-        sys.stdout.flush()
-        os.execv(sys.executable, [sys.executable, sys.argv[0]] + argv)
+        note = os.environ.get(RESTART_ENV)
+        if not note:                                                          # S3: no launcher
+            log(self.who, "WARN", "can't switch QoS variant: not started by a protorig launcher; "
+                                  f"restart it with --qos-variant {variant or '(none)'}")
+            return
+        profile = f"{VARIANT_LIBRARY}::{variant}" if variant else DEFAULT_PROFILE
+        try:                                                                  # S6a: QoS resolves for our topics
+            self.provider.default_profile = profile
+            for topic in self._topics:
+                self.provider.get_topic_datawriter_qos(topic)
+                self.provider.get_topic_datareader_qos(topic)
+        except dds.Error as e:
+            log(self.who, "ERROR", f"QoS variant switch failed: '{variant}' doesn't apply: {e}")
+            return
+        finally:
+            self.provider.default_profile = self.profile
+        try:                                                                  # S6a: note written
+            Path(note).write_text(variant + "\n", encoding="utf-8")
+        except OSError as e:
+            log(self.who, "ERROR", f"QoS variant switch failed: can't write the restart note: {e}")
+            return
+        log(self.who, "INFO", f"switching QoS variant to '{variant or 'default'}': asking the launcher to restart")
+        self._exit_code = EXIT_RESTART                                        # S1: run() closes DDS, returns 75
+        self.stop("QoS variant switch")
 
     # ------------------------------------------------------------------ run / stop
 

@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,17 @@ def on_temp(s):
         raise RuntimeError("below zero, on purpose")
     alerts.write(T.Alert(source=app.who, alert_id="ECHO", message="echo", value=s.temperature))
 app.on_data(inp, on_temp)
+# Failure switches for the restart tests (S6b, S6c):
+import os
+from pathlib import Path
+if os.environ.get("PROBE_CRASH_ON") and os.environ["PROBE_CRASH_ON"] == app.qos_variant:
+    sys.exit(3)                                   # this variant "fails to start"
+count_file = os.environ.get("PROBE_COUNT_FILE")
+if count_file:
+    n = int(Path(count_file).read_text()) if Path(count_file).exists() else 0
+    Path(count_file).write_text(str(n + 1))
+    if n >= 1:
+        sys.exit(4)                               # every start after the first fails
 sys.exit(app.run())
 '''
 
@@ -123,17 +135,88 @@ def test_set_param_rejects_non_finite(bus, start_app, probe_dir):
     assert "PARAM rate=" not in app.output          # the callback never saw it
 
 
+LONG = "Variant.Temperature.LongHistory"
+
+
+def _beat_with(beats, variant, after=0):
+    """A probe heartbeat carrying `variant`, among heartbeats received after index `after`."""
+    return any(b.app == "probe" and b.qos_variant == variant for b in beats.all()[after:])
+
+
 def test_qos_variant_restart(bus, start_app, probe_dir):
-    """Switching variant restarts the app; its heartbeat then reports the variant."""
+    """S1, S4, S5: a switch restarts the app through its launcher; the heartbeat
+    then reports the new variant; same variant again is ignored; "" = back to default."""
     from fw import types as T
     from fw.testing import wait_for
     beats = bus.listen("_sys/NodeStatus")
     app = _start(start_app, probe_dir)
-    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg="Variant.Temperature.LongHistory")
-    wait_for(lambda: any(b.app == "probe" and b.qos_variant == "Variant.Temperature.LongHistory"
-                         for b in beats.all()), 10, "a heartbeat carrying the new variant")
+    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
+    wait_for(lambda: _beat_with(beats, LONG), 10, "a heartbeat carrying the new variant")
+    assert app.restarts == 1 and not app.exited()
+    assert f"[launcher] switching QoS variant to '{LONG}'" in app.output
+
+    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)                 # same again: no restart
+    wait_for(lambda: f"already using QoS variant '{LONG}'" in app.output, 3, "'already using'")
+    assert app.restarts == 1
+
+    mark = len(beats.all())
+    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg="")                   # back to default
+    wait_for(lambda: _beat_with(beats, "", mark), 10, "a heartbeat on the default QoS")
+    assert app.restarts == 2
+
     bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg="Variant.Does.Not.Exist")
     wait_for(lambda: "unknown QoS variant" in app.output, 3, "a warning for an unknown variant")
+    assert app.restarts == 2
+
+
+def test_variant_switch_refused_without_launcher(bus, start_app, probe_dir):
+    """S3: started by hand (nobody to restart it): refuse the switch and stay up."""
+    from fw import types as T
+    from fw.testing import wait_for
+    beats = bus.listen("_sys/NodeStatus")
+    app = _start(start_app, probe_dir, supervised=False)
+    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
+    wait_for(lambda: "not started by a protorig launcher" in app.output, 3, "the refusal")
+    mark = len(beats.all())
+    wait_for(lambda: _beat_with(beats, "", mark), 3, "heartbeats still on the default QoS")
+    assert not app.exited() and not _beat_with(beats, LONG)
+
+
+def test_variant_switch_with_unwritable_note_stays_up(bus, start_app, probe_dir, tmp_path):
+    """S6a: the note can't be written: the app stays up on its current variant."""
+    from fw import types as T
+    from fw.supervise import RESTART_ENV
+    from fw.testing import wait_for
+    bad = str(tmp_path / "no" / "such" / "dir" / "restart.note")
+    app = _start(start_app, probe_dir, env={RESTART_ENV: bad})
+    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
+    wait_for(lambda: "can't write the restart note" in app.output, 3, "the failure to be logged")
+    time.sleep(0.5)
+    assert not app.exited() and app.restarts == 0
+
+
+def test_failed_switch_rolls_back(bus, start_app, probe_dir):
+    """S6b: the app fails to start on the new variant: the launcher restarts it on the old one."""
+    from fw import types as T
+    from fw.testing import wait_for
+    beats = bus.listen("_sys/NodeStatus")
+    app = _start(start_app, probe_dir, env={"PROBE_CRASH_ON": LONG})
+    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
+    wait_for(lambda: "[launcher] the new QoS variant failed to start (exit 3): rolling back" in app.output,
+             10, "the rollback")
+    mark = len(beats.all())
+    wait_for(lambda: _beat_with(beats, "", mark), 10, "heartbeats on the old (default) QoS again")
+    assert app.restarts == 2 and not app.exited()
+
+
+def test_failed_rollback_gives_up(bus, start_app, probe_dir, tmp_path):
+    """S6c: the rollback fails too: the launcher gives up instead of looping."""
+    from fw import types as T
+    app = _start(start_app, probe_dir, env={"PROBE_COUNT_FILE": str(tmp_path / "starts")})
+    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
+    assert app.wait_exit(15) == 4
+    assert "[launcher] the rollback failed too (exit 4): giving up" in app.output
+    assert app.restarts == 2                         # the switch, then one rollback: no loop
 
 
 def test_incompatible_qos_is_reported(bus, start_app, probe_dir):

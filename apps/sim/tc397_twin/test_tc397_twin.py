@@ -161,6 +161,21 @@ def test_R7_kill(bus, start_app):
     assert app.wait_exit(5) == EXIT_KILLED
 
 
+def test_R7_ignores_other_commands(bus, start_app):
+    """The real ECU can't switch QoS variant or change parameters; the twin ignores them."""
+    app = start_twin(start_app)
+    got = bus.listen(TOPIC)
+    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg="Variant.Temperature.LongHistory")   # a real variant
+    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg="")
+    bus.command(app, T.Command.CMD_SET_PARAM, arg="rate", value=20.0)
+    bus.command(app, T.Command.CMD_START_APP)
+    wait_for(lambda: app.output.count("ignoring ") >= 4, 3, "four 'ignoring' log lines")
+    n = got.count()
+    wait_for(lambda: got.count() >= n + 10, 3, "data to keep flowing")
+    assert app.restarts == 0 and not app.exited()
+    assert "switching QoS variant" not in app.output
+
+
 # --- R8 ----------------------------------------------------------------------------
 
 def test_R8_publishes_only_the_ecu_topics(bus, start_app):
@@ -215,8 +230,8 @@ def test_ignores_commands_for_others(bus, start_app):
 
 def test_fuzz_control_commands(bus, start_app):
     """500 random DemoControl commands (garbage targets, ids, strings, NaN/inf
-    values; only harmless commands aimed at the twin itself): it must keep
-    publishing correct data and never crash."""
+    values; aimed at the twin: any command except stop/kill, including real QoS
+    variants): it must keep publishing correct data, never crash or restart."""
     rnd = random.Random(7)                       # fixed seed: a failure is reproducible
     rs = lambda n: "".join(rnd.choice(string.printable) for _ in range(rnd.randint(0, n)))
     app = start_twin(start_app)
@@ -224,6 +239,7 @@ def test_fuzz_control_commands(bus, start_app):
     w = bus.writer("_sys/DemoControl")
     wait_for(lambda: w.publication_matched_status.current_count > 0, 5, "the twin to match")
     harmless = [T.Command.CMD_SET_PARAM, T.Command.CMD_SET_QOS_VARIANT, T.Command.CMD_START_APP]
+    real_variants = ["", "Variant.Temperature.LongHistory", "Variant.Alert.BestEffort"]
     for _ in range(500):
         mine = rnd.random() < 0.5
         w.write(T.DemoControl(
@@ -231,10 +247,11 @@ def test_fuzz_control_commands(bus, start_app):
             target_app="tc397_twin" if mine else rnd.choice(["", rs(31), "tc397_twi"]),
             cmd_id=rnd.getrandbits(64),
             command=rnd.choice(harmless) if mine else rnd.choice(list(T.Command)),
-            arg=rs(63),
+            arg=rnd.choice(real_variants) if rnd.random() < 0.2 else rs(63),
             value=rnd.choice([float("nan"), float("inf"), -1e308, 0.0, rnd.uniform(-1e6, 1e6)])))
     n = got.count()
     wait_for(lambda: got.count() >= n + 20, 5, "data to keep flowing")
     assert not app.exited(), app.output
+    assert app.restarts == 0, app.output
     assert "Traceback" not in app.output, app.output
     assert all(s.temperature == firmware_temperature(cycle_of(s)) for s in got.all())

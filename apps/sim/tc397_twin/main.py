@@ -1,7 +1,8 @@
 """
 tc397_twin — Stand-in for the TC397: publishes its temperature ramp exactly like the firmware.
 
-Topics in : _sys/DemoControl (stop / kill only; "kill" acts like pulling the ECU's power)
+Topics in : _sys/DemoControl: stop and kill only ("kill" acts like pulling the ECU's
+            power); QoS-variant and parameter commands are ignored, as the ECU can't do them
 Topics out: Example Temperature (sensor_msgs::msg::Temperature), nothing else
 Arguments : standard only (--node --scenario --domain --qos-variant --verbose).
             No app options on purpose: the twin mirrors the firmware, nothing more.
@@ -41,9 +42,11 @@ def copy_ecu_participant(qos: dds.DomainParticipantQos) -> None:
 
 
 # 1. Start-up. No heartbeat (R7, R8): the real ECU publishes no _sys/NodeStatus,
-#    so neither does its twin. It still obeys stop / kill from the Control Panel.
+#    so neither does its twin. It obeys only stop / kill (R7): the real ECU can't
+#    switch QoS variant or change parameters, so the twin mustn't either (R2).
 app = App("tc397_twin", "Stand-in for the TC397: publishes its temperature ramp exactly like the firmware",
-          heartbeat=False, participant_qos=copy_ecu_participant)
+          heartbeat=False, participant_qos=copy_ecu_participant,
+          obeys={T.Command.CMD_STOP_APP, T.Command.CMD_KILL_APP})
 
 # 2. The one writer (R1). Its QoS (R2: reliable, keep-last 1, volatile,
 #    250 ms heartbeat) comes from qos/topics.xml, which `protorig check` keeps

@@ -31,6 +31,7 @@ When you open the workspace, VS Code offers to install the recommended extension
 
 ## Documentation
 
+- [Quick Start - Demo bring up guide](docs/QUICKSTART.md): from machines switched off to every app running. Start here if you're new to the rig.
 - [docs/WORKFLOW.md](docs/WORKFLOW.md): the full design, commands and workflows.
 - [Naming conventions](docs/WORKFLOW.md#naming-conventions): topic names, folder terms. Read this before adding topics or folders.
 

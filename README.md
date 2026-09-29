@@ -49,7 +49,7 @@ Open `protorig.code-workspace` (File → Open Workspace from File) to see the fo
 - [x] Data contract (`interfaces/`), Python types (`libs/py/fw`), QoS (`qos/`), flash locks (`./protorig lock`), with checks verified against real Connext
 - [x] Python side of `libs/` (`fw.app`, `fw.testing`), Python app and scenario templates, `./protorig new` and `./protorig test`
 - [ ] C++ side of `libs/` (`fw::App`, `fw.cmake`) and the C++ app template
-- [ ] `tc397_twin`: requirements under review (temperature ramp, confirmed from the ECU source)
+- [x] `tc397_twin`: the TC397's temperature ramp, requirements R1–R9 from the ECU source
 - [ ] Shared apps: `node_agent`, `result_gui`, `control_panel`
 - [ ] `bootstrap/`, `gen`, `build`, `run`, `preflight`
 - [ ] Hardware bring-up: VM → TC397 → Pi

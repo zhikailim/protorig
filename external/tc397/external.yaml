@@ -17,3 +17,10 @@ topics:
       deadline: infinite            # a reader requesting any finite deadline would NOT match
       liveliness_lease: infinite    # same for a finite liveliness lease
       ownership: SHARED
+
+# The ECU's DomainParticipant. Readers use the lease to decide the ECU is gone
+# (e.g. power pulled), so its sim twin copies it.
+participant:
+  liveliness_lease: 100   # seconds. Not set in the firmware, so Connext Micro's default
+                          # (believed to be 100 s, like Pro). TO CONFIRM at bring-up:
+                          # Admin Console shows it for the real board.

@@ -25,6 +25,10 @@
         <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
         <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
         <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <!-- Same reliability heartbeat as the ECU (Temperature_publisher.c: 250 ms) -->
+        <protocol><rtps_reliable_writer>
+          <heartbeat_period><sec>0</sec><nanosec>250000000</nanosec></heartbeat_period>
+        </rtps_reliable_writer></protocol>
       </datawriter_qos>
       <datareader_qos topic_filter="Example Temperature">
         <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>

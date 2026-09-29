@@ -261,7 +261,11 @@ class AppLauncher:
 
     def __call__(self, name: str, *args: str, node: str = "test-node", folder: Path | None = None,
                  wait_heartbeat: bool = True, timeout: float = 10.0) -> RunningApp:
-        """Start app `name` (found in the repo, or in `folder` if given) on the bus's domain."""
+        """Start app `name` (found in the repo, or in `folder` if given) on the bus's domain.
+
+        Waits until it is ready: its first heartbeat, or with wait_heartbeat=False
+        (apps without one, e.g. sim twins) its "running" log line. Raises if it
+        exits during start-up, unless wait_heartbeat=False (tests of start-up errors)."""
         if folder is None:
             _, folder = find_app(name)
         folder = Path(folder)
@@ -286,6 +290,9 @@ class AppLauncher:
             if app.exited():
                 raise AssertionError(f"{name} exited during start-up (code {app.proc.returncode})\n"
                                      f"--- output ---\n{app.output}")
+        else:
+            wait_for(lambda: any(l.endswith(" running") for l in app.lines) or app.exited(),
+                     timeout, f"{name} to start")
         return app
 
     def stop_all(self) -> None:

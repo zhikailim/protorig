@@ -17,7 +17,8 @@ What App does for you, so apps contain only their own logic:
     topic its behaviour; --qos-variant switches to a Variant.* profile.
     No QoS code in apps.
   - participant named "<node>/<app>", so Admin Console shows who's who
-  - a 1 Hz heartbeat on _sys/NodeStatus
+  - a 1 Hz heartbeat on _sys/NodeStatus (heartbeat=False turns it off: sim twins
+    of external nodes, which must not publish anything the real node doesn't)
   - obeys _sys/DemoControl addressed to this app: stop, kill, switch QoS
     variant (restarts itself), set a parameter
   - logs incompatible-QoS events: when a reader and writer refuse to match,
@@ -25,7 +26,8 @@ What App does for you, so apps contain only their own logic:
   - clean shutdown on Ctrl-C / SIGTERM (the participant leaves discovery)
 
 A shortcut, never a wall: app.participant and every reader/writer are the real
-Connext objects.
+Connext objects, and participant_qos=fn lets an app adjust the participant QoS
+before it is created (e.g. a twin copying its ECU's liveliness lease).
 """
 from __future__ import annotations
 
@@ -94,8 +96,11 @@ class _NoDDS:
 
 
 class App:
-    def __init__(self, name: str, description: str = "", argv: list[str] | None = None):
+    def __init__(self, name: str, description: str = "", argv: list[str] | None = None,
+                 heartbeat: bool = True,
+                 participant_qos: Callable[[dds.DomainParticipantQos], None] | None = None):
         self.name = name
+        self.heartbeat = heartbeat
         self._argv = list(sys.argv[1:] if argv is None else argv)
         self._parser = argparse.ArgumentParser(prog=name, description=description, add_help=False)
         self._parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
@@ -142,6 +147,8 @@ class App:
 
         pqos = self.provider.participant_qos
         pqos.participant_name.name = self.who
+        if participant_qos is not None:
+            participant_qos(pqos)                   # app-specific tweaks, applied last
         self.participant = dds.DomainParticipant(self.domain, pqos)
         self._pub = dds.Publisher(self.participant)
         self._sub = dds.Subscriber(self.participant)
@@ -150,17 +157,22 @@ class App:
         self._conditions: list = []                # kept so they can be closed in order
 
         # --- framework plumbing
-        self._status_w = self.writer("_sys/NodeStatus")
+        # (no heartbeat = no NodeStatus writer at all, so nothing extra appears on the wire)
+        self._status_w = self.writer("_sys/NodeStatus") if heartbeat else None
         self._control_r = self.reader("_sys/DemoControl")
         self.on_data(self._control_r, self._on_control, internal=True)
-        self.every(HEARTBEAT_PERIOD, self._heartbeat)
+        if heartbeat:
+            self.every(HEARTBEAT_PERIOD, self._heartbeat)
 
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
                 signal.signal(sig, lambda *_: self.stop("signal"))
             except (ValueError, OSError):          # not in the main thread / unsupported
                 pass
-        log(self.who, "INFO", f"domain {self.domain}, QoS profile {self.profile}")
+        # The lease is read back from the live participant, so the log shows what is in effect.
+        lease = self.participant.qos.discovery_config.participant_liveliness_lease_duration.to_seconds()
+        log(self.who, "INFO", f"domain {self.domain}, QoS profile {self.profile}, "
+                              f"liveliness lease {lease:g} s{'' if heartbeat else ', no heartbeat'}")
 
     # ------------------------------------------------------------------ arguments
 
@@ -342,7 +354,8 @@ class App:
             self._close()
             return 2
         log(self.who, "INFO", "running")
-        self._heartbeat()
+        if self.heartbeat:
+            self._heartbeat()
         while self._running:
             now = time.monotonic()
             next_due = min((t.due for t in self._timers), default=now + 0.2)

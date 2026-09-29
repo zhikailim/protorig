@@ -20,6 +20,7 @@ Publishes a temperature ramp (the existing sample application, `Temperature_publ
 | Data: `header.stamp` | First sample 0.100 s, then +100 ms per task run, even when a write fails (not wall-clock time; resets with the board) | publisher source |
 | Rate | 10 Hz, assuming the OS task runs every 100 ms (the stamp step suggests so) | **To confirm** in the OS configuration |
 | Limits | `remote_participant_allocation = 5`, `max_message_size = 1400` | publisher source |
+| Participant liveliness lease | Not set, so Connext Micro's default (believed 100 s) | **To confirm** in Admin Console |
 
 The temperature only advances after a successful write, but the stamp advances every run. So a failed write shows up at readers as a 200 ms gap in the stamp, with no temperature value skipped.
 
@@ -31,6 +32,7 @@ The temperature only advances after a successful write, but the stamp advances e
 ## Files
 
 - `external.yaml`: the topic, type and writer QoS in machine-readable form; `protorig check` keeps every QoS profile compatible with it.
+- Sim twin: `apps/sim/tc397_twin/` (requirements R1–R9 in its README). Change it whenever the firmware changes.
 - `known_good_USER_QOS_PROFILES.xml`: the Windows host profile that is known to receive data from the TC397. Key parts: `allow_interfaces_list` restricted to the host's own IP with `max_interface_count` 1 (multi-NIC Windows hosts otherwise advertise unreachable addresses), and unicast initial peer `4@builtin.udpv4://172.23.100.101`.
 - `host_sample_Temperature_subscriber.cxx`: the working host-side subscriber (Traditional C++ API), for reference.
 
@@ -39,6 +41,8 @@ The known-good profile and host sample were built with Connext 7.6.0; protorig u
 ## Open items
 
 - Confirm the task period (10 Hz) in the OS configuration.
+- Confirm the participant liveliness lease (Admin Console); update `external.yaml` if it isn't 100 s.
+- Check what the ECU puts in each sample's `source_timestamp` (probably time since boot). Until then, no app relies on it.
 - Run the `rtiddsspy` smoke test from the VM and the Pi (risk 2).
 - Decide how to handle the 5-participant limit (risk 1).
 - Once you've confirmed the board runs the IDL in `interfaces/external/tc397/` (the host sample receiving data is good evidence), run `./protorig lock tc397` to record it.

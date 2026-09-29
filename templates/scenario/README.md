@@ -20,6 +20,10 @@ Write this README first: it is the spec the apps and tests are built from.
 
 ## 4. Setup
 
+(Optional: a system diagram. Either a ```mermaid block here, or an image kept in
+this scenario's docs/ folder: ![System](docs/system.drawio.svg). State its key
+facts in words too; requirements are written from the text.)
+
 - Nodes and IPs: see `scenario.yaml`.
 - Anything outside the repo (flashing, cabling, accounts):
 

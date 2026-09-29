@@ -27,7 +27,9 @@
       "ms-vscode.cpptools",
       "ms-vscode.cmake-tools",
       "ms-vscode-remote.remote-ssh",
-      "redhat.vscode-yaml"
+      "redhat.vscode-yaml",
+      "bierner.markdown-mermaid",   // draws ```mermaid diagrams in the Markdown preview (Ctrl+K V)
+      "hediet.vscode-drawio"        // edits .drawio.svg diagrams (e.g. scenarios/<name>/docs/)
     ]
   }
 }

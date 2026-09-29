@@ -27,6 +27,8 @@ git clone https://github.com/zhikailim/protorig && cd protorig
 
 Open `protorig.code-workspace` (File → Open Workspace from File) to see the folders in workflow order: scenarios → interfaces → qos → apps → libs → external → templates → tests, with the whole repo last. GitHub's web view always sorts alphabetically; the table above is the guide there.
 
+When you open the workspace, VS Code offers to install the recommended extensions (Python, C/C++, CMake, Remote-SSH, YAML, and two for diagrams). To see a README with its diagrams, open the preview beside the text with `Ctrl+K V`: `mermaid` blocks need the Markdown Preview Mermaid Support extension; `.drawio.svg` files are edited with Draw.io Integration and show in the preview like any image.
+
 ## Documentation
 
 - [docs/WORKFLOW.md](docs/WORKFLOW.md): the full design, commands and workflows.

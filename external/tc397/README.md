@@ -25,7 +25,7 @@ The known-good profile and host sample were built with Connext 7.6.0; protorig u
 
 ## Open items
 
-- The ECU's publish rate and pressure unit: `apps/sim/tc397_twin` assumes 10 Hz and kPa around 230 until confirmed (both are arguments).
+- The ECU's publish rate and pressure unit (needed for its sim twin).
 
 - Which field(s) carry the pressure, and one tire or four (how tires are identified)?
 - Confirm the domain ID and the discovery mode.

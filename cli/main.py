@@ -19,9 +19,8 @@ except ImportError:
     sys.exit(2)
 
 PLANNED = {
-    "gen": "Generate per-node QoS and peer settings into build/",
+    "gen": "Generate discovery settings as C source for Micro/Cert apps (run writes the XML ones)",
     "build": "Build C/C++ apps (runs rtiddsgen)",
-    "run": "Run a scenario (--sim, or --node <node>) or one app (--app)",
     "preflight": "Check every real node is up and discovered",
     "send": "Publish one sample from the command line",
     "deploy": "Push built binaries and configs to a node (cross-compile targets)",
@@ -65,10 +64,35 @@ def main(argv=None) -> int:
     ts = sub.add_parser("test", help="Run check, then the automated tests (all, or named apps)")
     ts.add_argument("apps", nargs="*", help="only these apps' tests")
     ts.add_argument("-k", help="only tests whose name matches this expression")
+    rn = sub.add_parser("run", help="Run a scenario (--sim, or --node <node>) or one app (--app)",
+                        description="Start a scenario on this machine (--sim), this machine's part of the "
+                                    "real rig (--node), or one app: run's options first, then --app <name>, "
+                                    "then the app's own arguments, e.g. "
+                                    "protorig run --domain 5 --app my_gui --threshold 14.5. Ctrl-C stops everything.")
+    rn.add_argument("scenario_name", nargs="?", metavar="scenario", help="the scenario (for --sim and --node)")
+    rn.add_argument("--sim", action="store_true", help="the whole scenario on this machine, twins for external nodes; "
+                                                       "nothing reaches the network")
+    rn.add_argument("--node", help="only this node's apps; run it on that node's machine")
+    rn.add_argument("--app", help="just this app; everything after its name goes to the app")
+    rn.add_argument("--scenario", dest="scenario_opt", metavar="SCENARIO", help="with --app: use this scenario's domain")
+    rn.add_argument("--domain", type=int, help="override the DDS domain")
+    rn.add_argument("--dry-run", action="store_true", help="show what would start, start nothing")
     for verb, text in PLANNED.items():
         sub.add_parser(verb, help=f"{text} (not built yet)", add_help=False)
 
-    args, _ = p.parse_known_args(argv)
+    argv = list(sys.argv[1:] if argv is None else argv)
+    app_args: list[str] = []
+    if argv[:1] == ["run"]:
+        # `run --app <name> ...`: everything after the app's name belongs to the app,
+        # untouched (so an app argument can never be mistaken for a run option).
+        for i, a in enumerate(argv):
+            if a == "--app" and i + 1 < len(argv):
+                argv, app_args = argv[:i + 2], argv[i + 2:]
+                break
+            if a.startswith("--app="):
+                argv, app_args = argv[:i + 1], argv[i + 1:]
+                break
+    args, extra = p.parse_known_args(argv)
     if args.verb is None:
         p.print_help()
         return 0
@@ -83,6 +107,10 @@ def main(argv=None) -> int:
     if args.verb == "test":
         import test
         return test.main(args)
+    if args.verb == "run":
+        import run
+        args.scenario = args.scenario_name or args.scenario_opt
+        return run.main(args, extra, app_args)
     if args.verb == "lock":
         import lock
         return lock.main(args)

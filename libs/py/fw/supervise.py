@@ -98,3 +98,140 @@ def after_exit(code: int, uptime: float, args: list[str], phase: str,
     if failed_start and phase == "rollback":                                  # S6c
         return Decision(False, None, f"the rollback failed too (exit {code}): giving up, app is down")
     return Decision(False, None, "")                                          # ended
+
+
+# ---------------------------------------------------------------------------
+# Supervised: one app process, restarted by the rules above. Shared by the test
+# harness (fw.testing) and `protorig run`, so both behave identically (U7).
+# ---------------------------------------------------------------------------
+
+import os as _os
+import signal as _signal
+import subprocess as _subprocess
+import threading as _threading
+import time as _time
+from typing import Callable as _Callable
+
+
+def _spawn_flags() -> dict:
+    """Start each app in its own process group, so the launcher decides how and
+    when it stops: a Ctrl-C in the terminal reaches only the launcher, which then
+    stops every app politely (interrupt()). Same behaviour on Windows and POSIX."""
+    if _os.name == "nt":
+        return {"creationflags": _subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+class Supervised:
+    """One app process, supervised: restarted on a QoS-variant switch (S1-S7).
+
+    cmd, args   the program and its arguments (args change on a variant switch)
+    env         its environment; RESTART_ENV is set here when note is given
+    note        the restart-note path, or None = unsupervised (like a person
+                starting it by hand: it refuses variant switches, rule S3)
+    on_line     called with every line the app prints (default: kept in .lines only)
+    on_event    called with every launcher decision ("switching QoS variant ...")
+
+    .lines / .output   everything the app printed, across restarts, plus
+                       "[launcher] ..." lines for what the launcher did
+    .proc              the current process
+    .restarts          how many times it was restarted
+    .exited()          True once it has ended for good (not during a restart)
+    .returncode        its final exit code
+    """
+
+    def __init__(self, cmd: list[str], args: list[str], env: dict, note: Path | None,
+                 on_line: _Callable[[str], None] | None = None,
+                 on_event: _Callable[[str], None] | None = None):
+        self._cmd, self._args, self._note = list(cmd), list(args), note
+        self._env = dict(env)
+        self._env.pop(RESTART_ENV, None)
+        if note is not None:
+            self._env[RESTART_ENV] = str(note)
+        self._on_line, self._on_event = on_line, on_event
+        self.lines: list[str] = []
+        self.restarts = 0
+        self.returncode: int | None = None
+        self._stopping = False
+        self._ended = _threading.Event()
+        self._lock = _threading.Lock()
+        self.proc = self._spawn(self._args)
+        _threading.Thread(target=self._supervise, daemon=True).start()
+
+    def _spawn(self, args: list[str]) -> _subprocess.Popen:
+        proc = _subprocess.Popen(self._cmd + args, stdout=_subprocess.PIPE, stderr=_subprocess.STDOUT,
+                                 text=True, encoding="utf-8", errors="replace", env=self._env, **_spawn_flags())
+        _threading.Thread(target=self._read, args=(proc,), daemon=True).start()
+        return proc
+
+    def _read(self, proc):
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            self.lines.append(line)
+            if self._on_line:
+                self._on_line(line)
+
+    def _event(self, msg: str):
+        self.lines.append(f"[launcher] {msg}")
+        if self._on_event:
+            self._on_event(msg)
+
+    def _supervise(self):
+        args, phase, previous = self._args, "normal", None
+        while True:
+            started = _time.monotonic()
+            code = self.proc.wait()
+            with self._lock:
+                if self._stopping or self._note is None:       # stopped by the launcher, or unsupervised
+                    break
+                d = after_exit(code, _time.monotonic() - started, args, phase, previous, self._note)
+                if d.message:
+                    self._event(d.message)
+                if not d.restart:
+                    break
+                previous = args if d.phase == "switched" else previous
+                args, phase = d.args, d.phase
+                self.restarts += 1
+                self.proc = self._spawn(args)
+        self.returncode = code
+        self._ended.set()
+
+    @property
+    def output(self) -> str:
+        return "\n".join(self.lines)
+
+    def exited(self) -> bool:
+        return self._ended.is_set()
+
+    def ended_within(self, timeout: float) -> bool:
+        """Wait up to `timeout` seconds for it to end for good; True if it did."""
+        return self._ended.wait(timeout)
+
+    def wait_exit(self, timeout: float = 5.0) -> int:
+        if not self._ended.wait(timeout):
+            raise AssertionError(f"did not exit within {timeout}s\n--- output ---\n{self.output}")
+        return self.returncode
+
+    def interrupt(self) -> None:
+        """Polite stop, like Ctrl-C: SIGINT on POSIX, Ctrl-Break on Windows (the
+        app's own process group receives it; fw.App handles both). No restart."""
+        with self._lock:
+            self._stopping = True
+            proc = self.proc
+        if proc.poll() is None:
+            try:
+                proc.send_signal(_signal.CTRL_BREAK_EVENT if _os.name == "nt" else _signal.SIGINT)
+            except (OSError, ValueError):
+                pass
+
+    def terminate(self, grace: float = 5.0) -> int | None:
+        """Stop for sure: polite first, then forced after `grace` seconds. No restart."""
+        self.interrupt()
+        proc = self.proc
+        try:
+            proc.wait(timeout=grace)
+        except _subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+        self._ended.wait(5)
+        return self.returncode

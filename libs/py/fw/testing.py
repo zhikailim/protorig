@@ -46,6 +46,7 @@ import rti.connextdds as dds
 from fw import topics as fw_topics
 from fw import types as T
 from fw.app import DEFAULT_PROFILE, ROOT, qos_files
+from fw.supervise import Supervised
 
 TEST_DOMAINS = range(150, 200)      # never 0: tests must not disturb a live rig
 
@@ -208,94 +209,21 @@ def find_app(name: str) -> tuple[str, Path]:
     return hits[0]
 
 
-class RunningApp:
-    """An app started by a test, supervised like node_agent will: when it exits
-    asking for a restart (QoS variant switch), it is started again by the rules
-    in fw/supervise.py. The test keeps this one handle across restarts.
-
-    .lines / .output   everything the app printed, across restarts, plus
-                       "[launcher] ..." lines saying what the launcher did
-    .proc              the current process
-    .exited()          True once the app has ended for good (not during a restart)
-    """
+class RunningApp(Supervised):
+    """An app started by a test, supervised exactly like `protorig run` and
+    node_agent supervise theirs (fw.supervise.Supervised): restarted on a QoS
+    variant switch, one handle across restarts. Adds the app's name and node."""
 
     def __init__(self, name: str, node: str, cmd: list[str], args: list[str], env: dict,
                  note: Path | None):
         self.name, self.node = name, node
-        self._cmd, self._args, self._env, self._note = cmd, list(args), env, note
-        self.lines: list[str] = []
-        self.restarts = 0
-        self._stopping = False
-        self._ended = threading.Event()
-        self._lock = threading.Lock()
-        self.returncode: int | None = None
-        self.proc = self._spawn(self._args)
-        threading.Thread(target=self._supervise, daemon=True).start()
-
-    def _spawn(self, args: list[str]) -> subprocess.Popen:
-        proc = subprocess.Popen(self._cmd + args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, env=self._env)
-        threading.Thread(target=self._read, args=(proc,), daemon=True).start()
-        return proc
-
-    def _read(self, proc):
-        for line in proc.stdout:
-            self.lines.append(line.rstrip("\n"))
-
-    def _supervise(self):
-        from fw.supervise import after_exit
-        args, phase, previous = self._args, "normal", None
-        while True:
-            started = time.monotonic()
-            code = self.proc.wait()
-            with self._lock:
-                if self._stopping or self._note is None:     # stopped by the test, or unsupervised
-                    break
-                d = after_exit(code, time.monotonic() - started, args, phase, previous, self._note)
-                if d.message:
-                    self.lines.append(f"[launcher] {d.message}")
-                if not d.restart:
-                    break
-                previous = args if d.phase == "switched" else previous
-                args, phase = d.args, d.phase
-                self.restarts += 1
-                self.proc = self._spawn(args)
-        self.returncode = code
-        self._ended.set()
-
-    @property
-    def output(self) -> str:
-        return "\n".join(self.lines)
-
-    def exited(self) -> bool:
-        return self._ended.is_set()
+        super().__init__(cmd, args, env, note)
 
     def wait_exit(self, timeout: float = 5.0) -> int:
-        if not self._ended.wait(timeout):
-            raise AssertionError(f"{self.name} did not exit within {timeout}s\n--- output ---\n{self.output}")
-        return self.returncode
-
-    def terminate(self) -> int | None:
-        """Polite stop (SIGTERM, or kill on Windows), then force after 5 s. No restart."""
-        with self._lock:
-            self._stopping = True
-            proc = self.proc
-        if proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=5)
-        self._ended.wait(5)
-        return self.returncode
-
-    def interrupt(self) -> None:
-        """Ctrl-C (SIGINT); on Windows falls back to terminate()."""
-        if os.name == "nt":
-            self.terminate()
-        else:
-            self.proc.send_signal(signal.SIGINT)
+        try:
+            return super().wait_exit(timeout)
+        except AssertionError as e:
+            raise AssertionError(f"{self.name} {e}") from None
 
 
 class AppLauncher:
@@ -327,12 +255,13 @@ class AppLauncher:
         full_env = dict(os.environ)
         full_env["PYTHONPATH"] = str(ROOT / "libs" / "py") + os.pathsep + full_env.get("PYTHONPATH", "")
         full_env["PYTHONUNBUFFERED"] = "1"
-        full_env.pop(RESTART_ENV, None)
+        env = dict(env or {})
         note = None
-        if supervised:
-            note = Path(tempfile.mkdtemp(prefix=f"protorig-{name}-")) / "restart.note"
-            full_env[RESTART_ENV] = str(note)
-        full_env.update(env or {})
+        if supervised:                    # a test may name its own note path (e.g. an unwritable one)
+            note = Path(env.pop(RESTART_ENV, None) or
+                        Path(tempfile.mkdtemp(prefix=f"protorig-{name}-")) / "restart.note")
+        env.pop(RESTART_ENV, None)
+        full_env.update(env)
         app = RunningApp(name, node, cmd, ["--node", node, "--domain", str(self.bus.domain), *args],
                          full_env, note)
         self.running.append(app)

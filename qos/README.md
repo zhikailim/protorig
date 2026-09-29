@@ -6,6 +6,6 @@
 
 Libraries: `protorig_base`, `protorig` (profile `Topics` is the default), `protorig_variants` (profiles named `Variant.*`).
 
-Per-node network settings (interface restriction, peers) are generated into `build/` as `node_qos.xml`, never hand-written. Apps load the files as a list (Connext has no include for QoS files).
+Per-node network settings (interface restriction, peers) are generated into `build/` as `node_qos.xml` by `protorig run`, never hand-written. Apps load the files as a list (Connext has no include for QoS files).
 
 `./protorig check` asks Connext for each profile's effective QoS and rejects anything that would stop matching an external node (see `external/*/external.yaml`), or where our own writers and readers wouldn't match. XML comments may not contain `--`.

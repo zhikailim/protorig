@@ -12,10 +12,12 @@ fw.app — the standard way to write a Python protorig app (tooling or sim twin)
 What App does for you, so apps contain only their own logic:
   - standard arguments: --node, --scenario, --domain, --qos-variant, --verbose
   - domain: --domain, else the scenario's domain, else 0
-  - QoS: loads qos/base.xml, topics.xml, variants.xml (+ this node's generated
-    node_qos.xml when it exists) as a list; the default profile gives every
-    topic its behaviour; --qos-variant switches to a Variant.* profile.
-    No QoS code in apps.
+  - QoS: loads qos/base.xml, topics.xml, variants.xml as a list; the default
+    profile gives every topic its behaviour; --qos-variant switches to a
+    Variant.* profile. No QoS code in apps.
+  - discovery: `protorig run` hands the app a generated settings file in
+    PROTORIG_NODE_QOS (--sim: this machine only; --node: the scenario's peers
+    and this node's own IP). Without it, Connext's defaults.
   - participant named "<node>/<app>", so Admin Console shows who's who
   - a 1 Hz heartbeat on _sys/NodeStatus (heartbeat=False turns it off: sim twins
     of external nodes, which must not publish anything the real node doesn't)
@@ -54,6 +56,8 @@ from fw.supervise import EXIT_KILLED, EXIT_RESTART, RESTART_ENV
 from fw import types as T
 
 ROOT = Path(__file__).resolve().parents[3]
+NODE_QOS_ENV = "PROTORIG_NODE_QOS"          # generated discovery settings (set by protorig run)
+NODE_PROFILE = "protorig_node::Participant"  # the profile inside that file
 QOS_FILES = ("base.xml", "topics.xml", "variants.xml")
 DEFAULT_PROFILE = "protorig::Topics"
 VARIANT_LIBRARY = "protorig_variants"
@@ -77,12 +81,16 @@ def scenario_domain(scenario: str) -> int | None:
     return dom if isinstance(dom, int) else None
 
 
-def qos_files(scenario: str | None, node: str) -> list[str]:
+def qos_files(scenario: str | None = None, node: str | None = None) -> list[str]:
+    """The repo's QoS files, plus the discovery settings file named in
+    PROTORIG_NODE_QOS if a launcher set one. (scenario and node are accepted for
+    compatibility; the launcher decides which settings apply.)"""
     files = [str(ROOT / "qos" / f) for f in QOS_FILES if (ROOT / "qos" / f).exists()]
-    if scenario:
-        node_file = ROOT / "build" / scenario / node / "node_qos.xml"
-        if node_file.exists():
-            files.append(str(node_file))
+    node_qos = os.environ.get(NODE_QOS_ENV)
+    if node_qos:
+        if not Path(node_qos).is_file():
+            raise SystemExit(f"protorig: {NODE_QOS_ENV} names {node_qos}, which doesn't exist")
+        files.append(node_qos)
     return files
 
 
@@ -152,7 +160,13 @@ class App:
         self.provider.default_profile = profile
         self.profile = profile
 
-        pqos = self.provider.participant_qos
+        # Discovery: the launcher's generated settings when given, else Connext defaults.
+        if os.environ.get(NODE_QOS_ENV):
+            pqos = self.provider.participant_qos_from_profile(NODE_PROFILE)
+            self.discovery = f"settings from {Path(os.environ[NODE_QOS_ENV]).name}"
+        else:
+            pqos = self.provider.participant_qos
+            self.discovery = "Connext defaults"
         pqos.participant_name.name = self.who
         if participant_qos is not None:
             participant_qos(pqos)                   # app-specific tweaks, applied last
@@ -171,7 +185,10 @@ class App:
         if heartbeat:
             self.every(HEARTBEAT_PERIOD, self._heartbeat)
 
-        for sig in (signal.SIGINT, signal.SIGTERM):
+        # SIGBREAK: Ctrl-Break on Windows, how a launcher politely stops an app there.
+        for sig in (signal.SIGINT, signal.SIGTERM, getattr(signal, "SIGBREAK", None)):
+            if sig is None:
+                continue
             try:
                 signal.signal(sig, lambda *_: self.stop("signal"))
             except (ValueError, OSError):          # not in the main thread / unsupported
@@ -179,7 +196,8 @@ class App:
         # The lease is read back from the live participant, so the log shows what is in effect.
         lease = self.participant.qos.discovery_config.participant_liveliness_lease_duration.to_seconds()
         log(self.who, "INFO", f"domain {self.domain}, QoS profile {self.profile}, "
-                              f"liveliness lease {lease:g} s{'' if heartbeat else ', no heartbeat'}")
+                              f"liveliness lease {lease:g} s{'' if heartbeat else ', no heartbeat'}, "
+                              f"discovery: {self.discovery}")
 
     # ------------------------------------------------------------------ arguments
 

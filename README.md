@@ -53,5 +53,6 @@ When you open the workspace, VS Code offers to install the recommended extension
 - [ ] C++ side of `libs/` (`fw::App`, `fw.cmake`) and the C++ app template
 - [x] `tc397_twin`: the TC397's temperature ramp, requirements R1–R9 from the ECU source
 - [ ] Shared apps: `node_agent`, `result_gui`, `control_panel`
-- [ ] `bootstrap/`, `gen`, `build`, `run`, `preflight`
+- [x] `run`: scenarios on one machine (`--sim`), one rig node (`--node`), or one app (`--app`)
+- [ ] `bootstrap/`, `build`, `preflight`
 - [ ] Hardware bring-up: VM → TC397 → Pi

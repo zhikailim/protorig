@@ -30,6 +30,7 @@ Connext objects.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import platform
 import signal
@@ -78,6 +79,14 @@ def qos_files(scenario: str | None, node: str) -> list[str]:
     return files
 
 
+class Timer:
+    """Returned by App.every(). Change .period to change the rate live."""
+    def __init__(self, period: float, fn: Callable[[], None]):
+        self.period = period
+        self.due = time.monotonic() + period
+        self.fn = fn
+
+
 class _NoDDS:
     """Stand-in for readers/writers while only --help is being printed."""
     def __getattr__(self, _name):
@@ -110,7 +119,7 @@ class App:
         self.incompatible: list[str] = []          # incompatible-QoS events seen (also logged)
         self._param_callbacks: dict[str, list[Callable]] = {}
         self._on_data: list[tuple] = []
-        self._timers: list[list] = []              # [period, next_due, fn]
+        self._timers: list[Timer] = []
         self._running = True
         self._exit_code = 0
         self._seen_cmds: set[int] = set()
@@ -231,11 +240,14 @@ class App:
         self._waitset.attach_condition(cond)
         self._conditions.append(cond)
 
-    def every(self, seconds: float, fn: Callable[[], None]) -> None:
-        """Call fn() every `seconds` while the app runs."""
-        if seconds <= 0:
+    def every(self, seconds: float, fn: Callable[[], None]) -> Timer:
+        """Call fn() every `seconds` while the app runs. Returns the Timer;
+        set timer.period to change the rate while running."""
+        if not seconds > 0:
             raise ValueError("every(): period must be > 0")
-        self._timers.append([seconds, time.monotonic() + seconds, fn])
+        t = Timer(seconds, fn)
+        self._timers.append(t)
+        return t
 
     # ------------------------------------------------------------------ plumbing
 
@@ -272,6 +284,9 @@ class App:
             log(self.who, "WARN", f"set_param: unknown parameter '{name}' (known: {', '.join(self.params) or 'none'})")
             return
         old = self.params[name]
+        if not math.isfinite(value):
+            log(self.who, "WARN", f"set_param: rejected non-finite value {value} for '{name}'")
+            return
         try:
             new = type(old)(value) if not isinstance(old, bool) else bool(value)
         except (TypeError, ValueError):
@@ -330,7 +345,7 @@ class App:
         self._heartbeat()
         while self._running:
             now = time.monotonic()
-            next_due = min((t[1] for t in self._timers), default=now + 0.2)
+            next_due = min((t.due for t in self._timers), default=now + 0.2)
             timeout = max(0.0, min(0.2, next_due - now))
             try:
                 self._waitset.dispatch(dds.Duration.from_seconds(timeout))   # runs handlers of triggered conditions
@@ -338,10 +353,10 @@ class App:
                 pass
             now = time.monotonic()
             for t in self._timers:
-                if now >= t[1]:
-                    t[1] = now + t[0] if now - t[1] > t[0] else t[1] + t[0]   # no burst after a stall
+                if now >= t.due:
+                    t.due = now + t.period if now - t.due > t.period else t.due + t.period   # no burst after a stall
                     try:
-                        t[2]()
+                        t.fn()
                     except Exception:
                         log(self.who, "ERROR", f"in every():\n{traceback.format_exc()}")
         self._close()

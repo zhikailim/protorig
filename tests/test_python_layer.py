@@ -114,6 +114,15 @@ def test_set_param(bus, start_app, probe_dir):
     assert not app.exited()
 
 
+def test_set_param_rejects_non_finite(bus, start_app, probe_dir):
+    from fw import types as T
+    from fw.testing import wait_for
+    app = _start(start_app, probe_dir)
+    bus.command(app, T.Command.CMD_SET_PARAM, arg="rate", value=float("nan"))
+    wait_for(lambda: "rejected non-finite value" in app.output, 3, "NaN to be rejected")
+    assert "PARAM rate=" not in app.output          # the callback never saw it
+
+
 def test_qos_variant_restart(bus, start_app, probe_dir):
     """Switching variant restarts the app; its heartbeat then reports the variant."""
     from fw import types as T

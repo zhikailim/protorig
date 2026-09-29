@@ -25,6 +25,8 @@ The known-good profile and host sample were built with Connext 7.6.0; protorig u
 
 ## Open items
 
+- The ECU's publish rate and pressure unit: `apps/sim/tc397_twin` assumes 10 Hz and kPa around 230 until confirmed (both are arguments).
+
 - Which field(s) carry the pressure, and one tire or four (how tires are identified)?
 - Confirm the domain ID and the discovery mode.
 - The TC397's own initial peer list: does it announce to the VM and Pi, or only to Windows? The 15-minute `rtiddsspy` smoke test from the VM answers this.

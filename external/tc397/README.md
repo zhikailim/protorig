@@ -21,7 +21,7 @@ Publishes a temperature ramp (the existing sample application, `Temperature_publ
 | Rate | 10 Hz, assuming the OS task runs every 100 ms (the stamp step suggests so) | **To confirm** in the OS configuration |
 | Limits | `remote_participant_allocation = 5`, `max_message_size = 1400` | publisher source |
 
-The value only advances after a successful write, so a stall on the ECU shows as a flat line, not a jump.
+The temperature only advances after a successful write, but the stamp advances every run. So a failed write shows up at readers as a 200 ms gap in the stamp, with no temperature value skipped.
 
 ## Rig risks (read before bring-up)
 

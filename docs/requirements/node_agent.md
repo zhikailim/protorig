@@ -2,8 +2,8 @@
 
 Status: UNDER REVIEW (30 Sep 2026). Nothing here is built yet.
 - N1-N3, N5-N8: approved in detail.
-- N4: REVISED 30 Sep 2026 (the agent owns the process, the app owns its
-  behaviour); the revision is under review.
+- N4: REVISED and approved 30 Sep 2026 (the agent owns the process, the app
+  owns its behaviour).
 - N9-N10: moved to run.md as U11-U12.
 - N11-N12: approved in outline, detail review pending.
 - N13 (variant switching, replaces the note protocol S1-S9) and N14 (what an
@@ -62,7 +62,7 @@ can be brought up and controlled from one machine.
   (no writers). Change in fw.App; C++ fw::App follows the same rule.
 - Not included: machine CPU and memory (deferred; see WORKFLOW.md).
 
-## N4. Commands the agent obeys  [REVISED 30 Sep 2026, under review]
+## N4. Commands the agent obeys  [revised, approved 30 Sep 2026]
 
 Rule: the agent owns the process, the app owns its behaviour.
 
@@ -78,7 +78,9 @@ Rule: the agent owns the process, the app owns its behaviour.
   route. (Changed from the approved N4, which used an empty `target_app` plus
   the app name in `arg`; the new form matches the IDL's own comments.)
 - Sim twins have no agent (like the hardware they stand in for) and obey
-  stop and kill themselves (N14).
+  stop and kill themselves (N14), only when named exactly (their node and
+  their app name), never `*`: a "stop all" leaves the twin running, as it
+  leaves the real ECU running on the rig.
 - `CMD_START_APP`: start with the `run:` entry's arguments; already running is
   ignored and logged; UNAVAILABLE refused.
 - `CMD_STOP_APP`: polite stop, forced after 10 s.
@@ -87,7 +89,15 @@ Rule: the agent owns the process, the app owns its behaviour.
 - `CMD_SET_PARAM`: not the agent's; ignored silently (the app acts on it).
 - A command is acted on once per `cmd_id`. Senders make ids unique (time in ns
   plus a random part); the agent remembers the last 1,000 ids.
-- One at a time, in arrival order. The agent never acts on itself
+- One at a time, in arrival order, but the agent never waits on a result
+  before taking the next command, so a kill is never stuck behind a stop:
+  - KILL of an app that is STOPPING or RESTARTING: immediate; cancels the
+    stop or switch;
+  - STOP during a variant switch: cancels the switch, stops the app;
+  - START of an app that is STARTING or RESTARTING: ignored ("already
+    running");
+  - variant switch of an app that isn't RUNNING: refused (N13 V2).
+- The agent never acts on itself
   (`node_agent` refused). Every command is logged with its sender, accepted
   or refused, with the reason.
 

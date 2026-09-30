@@ -123,3 +123,41 @@ def test_after_exit_fuzz(tmp_path):
             assert isinstance(d.args, list)
         if d.phase == "rollback":
             assert d.restart
+
+
+# --- S8: the note is written all or nothing; S9: nothing left behind -----------
+
+from fw.supervise import new_note_path, write_note  # noqa: E402
+
+
+def test_note_written_whole_and_no_temp_left(tmp_path):
+    n = tmp_path / "restart.note"
+    n.write_text("half-writ")                                   # garbage from before
+    write_note(n, V)
+    assert read_note(n) == V
+    assert not list(tmp_path.glob("*.tmp")), "the temporary file must be renamed into place"
+
+
+def test_note_never_half_written(tmp_path, monkeypatch):
+    """If the final step fails (e.g. killed mid-write), the note is absent, never
+    partial: the launcher then restarts unchanged (S6d) instead of reading garbage."""
+    import os
+    n = tmp_path / "restart.note"
+    def boom(*a, **k):
+        raise OSError("killed here")
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(OSError):
+        write_note(n, V)
+    assert not n.exists()
+
+
+def test_unwritable_note_raises(tmp_path):
+    with pytest.raises(OSError):
+        write_note(tmp_path / "no" / "such" / "restart.note", V)
+
+
+def test_note_paths_are_unique():
+    paths = {new_note_path("same_app") for _ in range(50)}
+    assert len(paths) == 50 and all(p.parent.is_dir() for p in paths)
+    for p in paths:
+        p.parent.rmdir()

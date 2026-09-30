@@ -251,7 +251,7 @@ Launchers find the repo's Python environment and the Connext license, then hand 
 - Apps that don't exist yet, or C/C++ apps not built yet, are listed and skipped: build and run incrementally.
 - Every app is supervised by `fw.supervise.Supervised` (the same code the tests use): a QoS-variant switch restarts it (S1–S7); a crash is reported loudly and the others keep running, with no automatic restart; `run` exits 1 if any app failed.
 - One console: each line prefixed with `node/app`; Connext's license banner shown once.
-- Each app runs in its own process group, so Ctrl-C reaches only `run`, which stops every app politely (SIGINT, or Ctrl-Break on Windows) and forces any that haven't stopped after 10 s. Known limit: if `run` itself is killed outright, its apps keep running.
+- Each app runs in its own process group, so Ctrl-C reaches only `run`, which stops every app politely (SIGINT, or Ctrl-Break on Windows) and forces any that haven't stopped after 10 s. If `run` itself is killed outright, its apps keep running until the S7 fix is built (with `node_agent`); after that they stop themselves within about 1 s.
 
 ---
 
@@ -369,6 +369,14 @@ Different from `external/` (systems built outside this repo). Pinned as git subm
 - **`loadgen`:** our own C++ brick for realistic load: many topics per process, each with its own rate, size and QoS, from a scenario's `traffic.yaml`; per-topic latency and loss. Only as realistic as its profile, so prefer customer data (architecture docs or recorded traffic).
 - **In-app latency probe in `fw`:** timestamps in samples, histograms, round-trips where possible so no clock sync is needed.
 
+## Deferred on purpose (decided, not built)
+
+Each can be added later without changing anything already built, because each is a new topic.
+
+- **Machine CPU and memory** (`_sys/MachineStatus`, keyed by node, published by `node_agent` once a second): would show under each machine on the node board. Needs the `psutil` package, which doesn't support QNX. Deferred for simplicity (29 Sep 2026).
+- **Forwarding app output** (`_sys/AppLog`, one sample per line, best effort, recent lines only): lets Windows show what a Pi app prints, with no SSH. `node_agent` already captures every line (N8), so this is one extra publish. Deferred (30 Sep 2026). Structured results such as Perftest's go on their own topic from the app itself (see `perf_runner` above).
+- **File transfer between nodes:** not planned; use a shared folder or `scp`.
+
 ## Scope
 Built for demos and POCs, prototype up to pilot. Not production: no security, `node_agent` remote kill is a demo convenience, `fw::App` trades control for speed. Production concerns (security, safety, deployment) can be added later as separate layers.
 - Open decision: a neutral CLI name (e.g. `./rig`) instead of `./protorig`, so it reads naturally for POCs and test benches.
@@ -426,7 +434,7 @@ scenarios/<name>/test_<name>.py     # each scenario, from its README's acceptanc
 ### What's built (Python)
 - `libs/py/fw/app.py` (`fw.App`): standard args; domain from `--domain` or the scenario; QoS loaded as the file list, `--qos-variant` selects a `Variant.*` profile; participant `<node>/<app>`; `reader(topic)` / `writer(topic)` by name (types from `fw/topics.py`, QoS from `qos/`); `on_data`, `every` (returns a Timer whose `.period` can change live), `run`; 1 Hz heartbeat (`heartbeat=False` for sim twins of external nodes that send none); `participant_qos=fn` adjusts the participant QoS before creation; logs the liveliness lease in effect at start-up; obeys `_sys/DemoControl` addressed to it (`target_app` = its name, `target_node` = its node or `*`): stop (exit 0), kill (exit 137), switch QoS variant (asks its launcher to restart it: see *Switching QoS variant* below), set a parameter declared with `app.arg` (with `on_param` callbacks; non-finite values rejected). `obeys=` limits which commands an app obeys (a sim twin obeys only what its real node could). Node-level commands (`target_app` empty) are left to `node_agent`. Logs incompatible-QoS events with the policy (e.g. `Durability`). Errors in callbacks are logged, never fatal. `--help` lists app arguments too; unknown arguments exit 2.
 - `libs/py/fw/supervise.py`: the restart rules every launcher follows (below). Pure decisions, no processes, so the test harness, `protorig run` and `node_agent` behave identically.
-- `libs/py/fw/testing.py`: `Bus` (isolated domain 150-199, repo QoS), `send`, `listen` / `Mailbox`, `collect`, `command`, `make_sample`, `wait_for`, `AppLauncher` / `RunningApp` (`start_app(name, *args, node=, folder=, supervised=, env=)`; restarts the app on a variant switch like `node_agent` will, keeping one handle (`.restarts` counts them); waits for the first heartbeat, or with `wait_heartbeat=False` for the `running` log line; `.output`, `.wait_exit`, `.interrupt`, `.terminate`).
+- `libs/py/fw/testing.py`: `Bus` (isolated test domain 60-99, below the OS's temporary-port range; repo QoS), `send`, `listen` / `Mailbox`, `collect`, `command`, `make_sample`, `wait_for`, `AppLauncher` / `RunningApp` (`start_app(name, *args, node=, folder=, supervised=, env=)`; restarts the app on a variant switch like `node_agent` will, keeping one handle (`.restarts` counts them); waits for the first heartbeat, or with `wait_heartbeat=False` for the `running` log line; `.output`, `.wait_exit`, `.interrupt`, `.terminate`).
 - Root `conftest.py`: fixtures `bus` (session) and `start_app` (stops every app it started). Skips with the reason when Connext or a license is missing.
 - `./protorig test [app ...] [-k expr]`: runs check, then pytest on `tests/`, `apps/`, `scenarios/` (or the named apps). Non-zero if either fails.
 
@@ -437,12 +445,14 @@ New QoS for immutable policies means new DDS entities, so the app has to restart
 | # | Rule |
 |---|---|
 | S1 | On `CMD_SET_QOS_VARIANT`: the variant already in use is ignored; an unknown one is ignored with a warning; otherwise the app writes a note naming the new variant (`""` = default), closes DDS and exits **75**. |
-| S2 | The launcher gives the app the note's path in `PROTORIG_RESTART_FILE`, one path per app. |
+| S2 | The launcher gives the app the note's path in `PROTORIG_RESTART_FILE`: one path per app launch, in its own new temporary folder, so two apps (or two launchers) can never share a note. The launcher knows which app exited, so it reads only that app's note. |
 | S3 | No `PROTORIG_RESTART_FILE` (started by hand): the app refuses the switch and stays up, saying how to restart it. |
 | S4 | On exit 75 the launcher reads (and deletes) the note and starts the app again with `--qos-variant` replaced. Other exit codes: the app has ended. |
 | S5 | The test harness does this transparently: one handle, output of every run kept. |
 | S6 | A failed switch leaves the app on the variant it had: checks run before anything is closed (a); if the new variant dies within 5 s the launcher rolls back once (b), and gives up if the rollback dies too (c); a missing note means restart unchanged (d). |
-| S7 | Known limit: if the launcher itself died, a switch takes the app down. The node board shows the dead `node_agent`. |
+| S7 | If the launcher itself dies, its apps are unsupervised. Approved fix (built with `node_agent`): the launcher passes its process ID to each app, and `fw.App` stops cleanly within about 1 s once that process is gone, so a restarted launcher never creates duplicate apps. Apps started by hand have no launcher ID and are unaffected. |
+| S8 | The note is written all or nothing: the app writes a temporary file next to it, then renames it into place (atomic on Windows and POSIX). The launcher sees the whole note or none (none is covered by S6d), never a half-written variant name. `fw.supervise.write_note` does this; C/C++ apps must do the same. |
+| S9 | Nothing is left behind: the launcher deletes each note right after reading it, and removes the app's note folder when the app ends for good. |
 
 Every heartbeat carries the variant actually in effect, so the Control Panel shows what happened, not what it asked for.
 

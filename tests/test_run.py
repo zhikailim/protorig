@@ -210,7 +210,7 @@ def test_generated_settings_load_in_connext(tmp_path, kind):
     else:
         assert f"4@builtin.udpv4://{NOT_LOCAL}" in peers and "4@builtin.udpv4://203.0.113.10" in peers
         assert not any("127.0.0.1" in x for x in peers)          # not itself
-    dds.DomainParticipant(170, pq).close()                        # Connext accepts it
+    dds.DomainParticipant(98, pq).close()                         # Connext accepts it (a test domain, see fw.testing)
 
 
 def test_peer_index_grows_with_apps():

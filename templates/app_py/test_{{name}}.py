@@ -40,6 +40,6 @@ def test_kill_command(bus, start_app):
 # def test_B1_...(bus, start_app):
 #     out = bus.listen("Alert")                        # 1. listen first
 #     app = start_app("{{name}}", "--threshold", "14.5")
-#     bus.send("Example Temperature", {"temperature": 15.0})   # 2. act
+#     bus.send("Example Temperature", {"temperature": 15.0}, to=app)   # 2. act (to=: wait for THIS app)
 #     wait_for(lambda: out.count() > 0, 2, "an alert") # 3. check
 #     assert out.last().alert_id == "TEMP_HIGH"

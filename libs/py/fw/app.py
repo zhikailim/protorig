@@ -52,7 +52,7 @@ import rti.connextdds as dds
 import yaml
 
 from fw import topics as fw_topics
-from fw.supervise import EXIT_KILLED, EXIT_RESTART, RESTART_ENV
+from fw.supervise import EXIT_KILLED, EXIT_RESTART, RESTART_ENV, write_note
 from fw import types as T
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -368,7 +368,7 @@ class App:
         finally:
             self.provider.default_profile = self.profile
         try:                                                                  # S6a: note written
-            Path(note).write_text(variant + "\n", encoding="utf-8")
+            write_note(note, variant)                                         # S8: all or nothing
         except OSError as e:
             log(self.who, "ERROR", f"QoS variant switch failed: can't write the restart note: {e}")
             return

@@ -14,7 +14,7 @@ Fixtures (defined in the repo's root conftest.py, available in every test):
   start_app  start an app by name; stopped automatically after the test
 
 Bus methods:
-  send(topic, {...} or sample)   publish one sample; waits for a reader to match first
+  send(topic, {...}, to=app)     publish one sample; waits for that app's reader to match first
   listen(topic) -> Mailbox       start collecting NOW; read later with .all() .last() .count()
   collect(topic, seconds)        listen, wait, return the list
   command(app, Command, ...)     send a _sys/DemoControl command to an app
@@ -34,7 +34,6 @@ import random
 import signal
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import typing
@@ -46,9 +45,15 @@ import rti.connextdds as dds
 from fw import topics as fw_topics
 from fw import types as T
 from fw.app import DEFAULT_PROFILE, ROOT, qos_files
-from fw.supervise import Supervised
+from fw.supervise import Supervised, new_note_path
 
-TEST_DOMAINS = range(150, 200)      # never 0: tests must not disturb a live rig
+# Test domains: never 0 or the low numbers a live rig uses, and all BELOW the
+# operating system's range of temporary ports (Linux 32768-60999, Windows
+# 49152-65535). Connext's ports for domain d start at 7400 + 250*d, so domains
+# 60-99 use ports 22400-32200. Domains 150-199 (used before) landed inside the
+# temporary range: any program briefly holding the domain's shared discovery
+# port made the whole domain unusable ("automatic participant index failed").
+TEST_DOMAINS = range(60, 100)
 
 
 def wait_for(condition, timeout: float, what: str = "condition", poll: float = 0.02):
@@ -160,12 +165,30 @@ class Bus:
             self._writers[topic] = w
         return self._writers[topic]
 
-    def send(self, topic: str, values, match_timeout: float = 5.0) -> None:
+    def send(self, topic: str, values, match_timeout: float = 5.0, to=None) -> None:
         """Publish one sample. Waits until a reader has matched, otherwise the
-        sample would be written before discovery finished and be lost."""
+        sample would be written before discovery finished and be lost.
+
+        to: the app that must receive it (a RunningApp, or its participant name
+        "node/app"). Then it waits for THAT app's reader, not just any reader:
+        the test bus is shared by every test, so a reader left over from an
+        earlier test's app could otherwise count as "matched" while the new app
+        hasn't been discovered yet, and the sample would miss it."""
         w = self.writer(topic)
-        wait_for(lambda: w.publication_matched_status.current_count > 0, match_timeout,
-                 f"a reader of '{topic}' to match")
+        if to is None:
+            wait_for(lambda: w.publication_matched_status.current_count > 0, match_timeout,
+                     f"a reader of '{topic}' to match")
+        else:
+            who = to if isinstance(to, str) else f"{to.node}/{to.name}"
+            def matched():
+                for h in w.matched_subscriptions:
+                    try:
+                        if w.matched_subscription_participant_data(h).participant_name.name == who:
+                            return True
+                    except dds.Error:                  # that reader went away meanwhile
+                        pass
+                return False
+            wait_for(matched, match_timeout, f"{who}'s reader of '{topic}' to match")
         w.write(make_sample(topic, values))
 
     def listen(self, topic: str, qos: dds.DataReaderQos | None = None) -> Mailbox:
@@ -186,7 +209,7 @@ class Bus:
         self._cmd_id += 1
         self.send("_sys/DemoControl", T.DemoControl(
             target_node=target_node if target_node is not None else app.node, target_app=app.name,
-            cmd_id=self._cmd_id, command=command, arg=arg, value=value))
+            cmd_id=self._cmd_id, command=command, arg=arg, value=value), to=app)
 
     def close_listeners(self) -> None:
         for b in self._boxes:
@@ -215,9 +238,9 @@ class RunningApp(Supervised):
     variant switch, one handle across restarts. Adds the app's name and node."""
 
     def __init__(self, name: str, node: str, cmd: list[str], args: list[str], env: dict,
-                 note: Path | None):
+                 note: Path | None, own_note_dir: bool = False):
         self.name, self.node = name, node
-        super().__init__(cmd, args, env, note)
+        super().__init__(cmd, args, env, note, own_note_dir=own_note_dir)
 
     def wait_exit(self, timeout: float = 5.0) -> int:
         try:
@@ -256,14 +279,14 @@ class AppLauncher:
         full_env["PYTHONPATH"] = str(ROOT / "libs" / "py") + os.pathsep + full_env.get("PYTHONPATH", "")
         full_env["PYTHONUNBUFFERED"] = "1"
         env = dict(env or {})
-        note = None
+        note, own = None, False
         if supervised:                    # a test may name its own note path (e.g. an unwritable one)
-            note = Path(env.pop(RESTART_ENV, None) or
-                        Path(tempfile.mkdtemp(prefix=f"protorig-{name}-")) / "restart.note")
+            given = env.pop(RESTART_ENV, None)
+            note, own = (Path(given), False) if given else (new_note_path(name), True)
         env.pop(RESTART_ENV, None)
         full_env.update(env)
         app = RunningApp(name, node, cmd, ["--node", node, "--domain", str(self.bus.domain), *args],
-                         full_env, note)
+                         full_env, note, own_note_dir=own)
         self.running.append(app)
         if wait_heartbeat:
             beats = self.bus.listen("_sys/NodeStatus")

@@ -18,7 +18,6 @@ import os
 import shlex
 import signal
 import sys
-import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
@@ -29,7 +28,7 @@ import repo
 
 sys.path.insert(0, str(repo.ROOT / "libs" / "py"))
 from fw.app import NODE_QOS_ENV            # noqa: E402
-from fw.supervise import EXIT_KILLED, Supervised   # noqa: E402
+from fw.supervise import EXIT_KILLED, Supervised, new_note_path   # noqa: E402
 
 STOP_GRACE = 10.0      # seconds apps get to stop politely before they are forced
 
@@ -174,9 +173,8 @@ def start_all(plan: list[Launch], common: list[str], env: dict, console: Console
     for l in plan:
         if l.cmd is None:
             continue
-        note = Path(tempfile.mkdtemp(prefix=f"protorig-{l.app}-")) / "restart.note"
         running[l.who] = Supervised(
-            l.cmd, ["--node", l.node, *common, *l.args], env, note,
+            l.cmd, ["--node", l.node, *common, *l.args], env, new_note_path(l.app), own_note_dir=True,
             on_line=lambda text, who=l.who: console.line(who, text),
             on_event=lambda msg, who=l.who: console.line(who, f"[run] {msg}"))
         console.run(f"started {l.who}")

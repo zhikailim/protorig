@@ -25,6 +25,13 @@ sys.path.insert(0, str(REPO / "cli"))
 import check           # noqa: E402
 import check_contract  # noqa: E402
 import lock            # noqa: E402
+
+
+def _test_domain() -> int:
+    """A domain from the shared test range (see fw.testing.TEST_DOMAINS)."""
+    import random
+    from fw.testing import TEST_DOMAINS
+    return random.choice(TEST_DOMAINS)
 import repo            # noqa: E402
 
 EXPECTED_BASELINE_WARNINGS = {"not locked", "Variant.Alert.BestEffort: switch 'Alert' publishers together"}
@@ -387,7 +394,7 @@ def test_checker_agrees_with_connext(label):
     predicted_ok = not check_contract.incompatibilities(offered, check_contract._qos_dict(rq))
 
     import random
-    p = dds.DomainParticipant(random.randint(150, 199))
+    p = dds.DomainParticipant(_test_domain())
     try:
         topic = dds.Topic(p, "Example Temperature", Temperature)
         w = dds.DataWriter(dds.Publisher(p), topic, _writer_qos_from(dds, offered))
@@ -418,7 +425,7 @@ def test_python_types_work_on_the_wire():
     import random
     provider = check_contract.load_qos_provider(dds)
     provider.default_profile = check_contract.DEFAULT_PROFILE
-    p = dds.DomainParticipant(random.randint(150, 199))
+    p = dds.DomainParticipant(_test_domain())
     try:
         samples = {
             "Alert": types.Alert(source="hpc-vm/hpc_monitor", alert_id="TEMP_HIGH",

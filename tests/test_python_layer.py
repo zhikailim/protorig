@@ -68,8 +68,8 @@ def _start(start_app, probe_dir, *args, **kw):
 def test_probe_runs_and_echoes(bus, start_app, probe_dir):
     from fw.testing import wait_for
     out = bus.listen("Alert")
-    _start(start_app, probe_dir)
-    bus.send("Example Temperature", {"temperature": 31.5})
+    app = _start(start_app, probe_dir)
+    bus.send("Example Temperature", {"temperature": 31.5}, to=app)
     wait_for(lambda: out.count() > 0, 3, "the echo alert")
     assert out.last().value == 31.5 and out.last().source == "test-node/probe"
 
@@ -86,8 +86,8 @@ def test_callback_exception_does_not_kill_the_app(bus, start_app, probe_dir):
     from fw.testing import wait_for
     out = bus.listen("Alert")
     app = _start(start_app, probe_dir)
-    bus.send("Example Temperature", {"temperature": -1.0})       # raises inside on_data
-    bus.send("Example Temperature", {"temperature": 29.0})       # must still be handled
+    bus.send("Example Temperature", {"temperature": -1.0}, to=app)   # raises inside on_data
+    bus.send("Example Temperature", {"temperature": 29.0}, to=app)   # must still be handled
     wait_for(lambda: out.count() > 0, 3, "an alert after the error")
     assert not app.exited()
     assert "below zero, on purpose" in app.output
@@ -100,10 +100,10 @@ def test_commands_for_others_are_ignored(bus, start_app, probe_dir):
     bus.command(app, T.Command.CMD_KILL_APP, target_node="hpc-pi")       # other node
     bus._cmd_id += 1
     bus.send("_sys/DemoControl", T.DemoControl(target_node="hpc-vm", target_app="other_app",
-                                               cmd_id=bus._cmd_id, command=T.Command.CMD_KILL_APP))
+                                               cmd_id=bus._cmd_id, command=T.Command.CMD_KILL_APP), to=app)
     bus._cmd_id += 1
     bus.send("_sys/DemoControl", T.DemoControl(target_node="hpc-vm", target_app="",   # node-level: node_agent's job
-                                               cmd_id=bus._cmd_id, command=T.Command.CMD_KILL_APP))
+                                               cmd_id=bus._cmd_id, command=T.Command.CMD_KILL_APP), to=app)
     time.sleep(1.0)
     assert not app.exited()
 
@@ -168,6 +168,24 @@ def test_qos_variant_restart(bus, start_app, probe_dir):
     bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg="Variant.Does.Not.Exist")
     wait_for(lambda: "unknown QoS variant" in app.output, 3, "a warning for an unknown variant")
     assert app.restarts == 2
+
+
+def test_note_folder_removed_when_app_ends(bus, start_app, probe_dir):
+    """S9: each launch gets its own note folder, and nothing is left behind once
+    the app ends for good (after a variant restart too)."""
+    import os
+    from fw import types as T
+    from fw.supervise import RESTART_ENV
+    from fw.testing import wait_for
+    beats = bus.listen("_sys/NodeStatus")
+    app = _start(start_app, probe_dir)
+    folder = Path(app._env[RESTART_ENV]).parent
+    assert folder.is_dir()
+    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
+    wait_for(lambda: _beat_with(beats, LONG), 10, "the restart")
+    assert folder.is_dir() and not list(folder.iterdir()), "note read and deleted, folder kept while running"
+    app.terminate()
+    assert not folder.exists()
 
 
 def test_variant_switch_refused_without_launcher(bus, start_app, probe_dir):
@@ -278,7 +296,7 @@ def test_fuzz_control_commands(bus, start_app, probe_dir):
         value = rnd.choice([0.0, -1.0, 1e308, float("nan"), float("inf"), 3.3])
         bus._cmd_id += 1
         bus.send("_sys/DemoControl", T.DemoControl(target_node=rnd.choice(["*", app.node]), target_app="probe",
-                                                   cmd_id=bus._cmd_id, command=cmd, arg=arg[:64], value=value))
+                                                   cmd_id=bus._cmd_id, command=cmd, arg=arg[:64], value=value), to=app)
     beats = bus.listen("_sys/NodeStatus")
     wait_for(lambda: sum(1 for b in beats.all() if b.app == "probe") >= 2, 5, "heartbeats after the fuzz burst")
     assert not app.exited(), app.output

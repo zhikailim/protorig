@@ -48,6 +48,27 @@ def with_variant(args: list[str], variant: str) -> list[str]:
     return out + (["--qos-variant", variant] if variant else [])
 
 
+def new_note_path(app: str) -> Path:
+    """S2/S9: a fresh, unique note path for one app launch, in its own new
+    temporary folder. Unique by construction, so two apps (or two launchers)
+    can never share a note. The launcher removes the folder when the app ends
+    for good (Supervised(..., own_note_dir=True))."""
+    import tempfile
+    return Path(tempfile.mkdtemp(prefix=f"protorig-{app}-")) / "restart.note"
+
+
+def write_note(path, variant: str) -> None:
+    """S8: the app's side. All or nothing: write a temporary file next to the
+    note, then rename it into place. A rename is atomic on Windows and POSIX,
+    so the launcher sees the whole note or none (and none is covered by S6d),
+    never a half-written variant name. Raises OSError if it can't be written (S6a)."""
+    import os
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(variant + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def read_note(path: Path) -> str | None:
     """The variant the app asked for ("" = default), or None if missing/unreadable (S6d).
     The note is deleted once read, so a stale one is never reused."""
@@ -142,8 +163,10 @@ class Supervised:
 
     def __init__(self, cmd: list[str], args: list[str], env: dict, note: Path | None,
                  on_line: _Callable[[str], None] | None = None,
-                 on_event: _Callable[[str], None] | None = None):
+                 on_event: _Callable[[str], None] | None = None,
+                 own_note_dir: bool = False):
         self._cmd, self._args, self._note = list(cmd), list(args), note
+        self._own_note_dir = own_note_dir and note is not None   # S9: remove its folder at the end
         self._env = dict(env)
         self._env.pop(RESTART_ENV, None)
         if note is not None:
@@ -194,6 +217,9 @@ class Supervised:
                 self.restarts += 1
                 self.proc = self._spawn(args)
         self.returncode = code
+        if self._own_note_dir:                       # S9: leave nothing behind
+            import shutil
+            shutil.rmtree(self._note.parent, ignore_errors=True)
         self._ended.set()
 
     @property

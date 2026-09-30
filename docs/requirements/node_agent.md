@@ -1,7 +1,7 @@
 # node_agent and run --live: requirements
 
-Status: UNDER REVIEW (30 Sep 2026). N1-N8 approved in detail; N9-N12 approved
-in outline, each still to be reviewed in detail. Nothing here is built yet.
+Status: UNDER REVIEW (30 Sep 2026). N1-N8 approved in detail; N11-N12 approved
+in outline, still to be reviewed in detail (N9-N10 moved to run.md as U11-U12). Nothing here is built yet.
 The bring-up flow these requirements produce is described in
 [../QUICKSTART.md](../QUICKSTART.md).
 
@@ -121,16 +121,10 @@ can be brought up and controlled from one machine.
 - Stopping (Ctrl-C or `agent stop`): all apps asked to stop, forced after
   10 s; then alerts cleared, heartbeat and app states disposed; exit.
 
-## N9. run <scenario> --live  [outline approved; detail review next]
+## N9, N10. Moved
 
-Typed on a rig machine: waits for every managed node's agent (lists missing
-ones and external nodes as "power it on"), sends each "start *", shows each app
-coming up, then a live up/down line per app until Ctrl-C; Ctrl-C sends
-"stop *" to every agent and reports. Agents stay up.
-
-## N10. --live runs from a machine in the scenario  [outline approved]
-
-Found by its IP; uses that machine's discovery settings.
+`run <scenario> --live` is a mode of the run command, so its requirements now
+live with run's: U11 and U12 in [run.md](run.md).
 
 ## N11. Never stop the sender  [outline approved]
 

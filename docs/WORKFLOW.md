@@ -242,6 +242,8 @@ Launchers find the repo's Python environment and the Connext license, then hand 
 
 ### Running (`protorig run`, requirements U1–U10)
 
+The numbered requirements (U1–U12, with status) are in [requirements/run.md](requirements/run.md); this is the summary.
+
 | Mode | Starts | Discovery settings it generates |
 |---|---|---|
 | `--sim` | every node's apps on this machine, plus each external node's `sim:` twin; each app gets its node's name (`--node hpc-pi`) | shared memory only: nothing reaches the network, so a sim run on domain 0 can't mix with the real rig; Admin Console on the same PC still sees it |

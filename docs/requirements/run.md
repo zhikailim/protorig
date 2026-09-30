@@ -2,7 +2,7 @@
 
 Status (30 Sep 2026):
 - U1-U10 and D1-D3: approved 29 Sep 2026, built and tested.
-- B1-B7: added while building; to be confirmed.
+- B1-B7: added while building; approved 30 Sep 2026.
 - U2 (changed): approved 30 Sep 2026 as part of node_agent (N2); not built yet.
 - U11-U12 (--live): moved here from node_agent (N9, N10); under review.
 
@@ -29,7 +29,7 @@ U2. `protorig run <scenario> --sim` starts every node's apps on this
 U3. `--sim` stays on this machine: nothing reaches the network, so a sim run
     on domain 0 can't mix with a powered-on TC397 or the rig. Admin Console
     on the same PC still sees everything.
-    (See B7: built as shared memory only.)
+    (Built as shared memory only: see B7, approved.)
 
 U4. `protorig run <scenario> --node <node>` starts only that node's apps.
     It first writes that node's discovery settings from scenario.yaml: the
@@ -62,7 +62,7 @@ D2. An app that crashes is reported loudly; the others keep running; it is
 D3. C/C++ apps not built yet are listed as "not built" and skipped.
 
 
-## Added while building (29-30 Sep 2026): please confirm
+## Added while building (29-30 Sep 2026): approved 30 Sep 2026
 
 B1. Argument order for `--app`: run's own options go BEFORE `--app <name>`;
     everything after the app's name goes to the app unchanged, e.g.

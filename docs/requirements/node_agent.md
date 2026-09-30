@@ -6,8 +6,8 @@ Status: UNDER REVIEW (30 Sep 2026). Nothing here is built yet.
   owns its behaviour).
 - N9-N10: moved to run.md as U11-U12.
 - N11-N12: approved in outline, detail review pending.
-- N13 (variant switching, replaces the note protocol S1-S9) and N14 (what an
-  app obeys): new, under review.
+- N13 (variant switching, replaces the note protocol S1-S9): approved 30 Sep 2026.
+- N14 (what an app obeys): new, under review.
 The bring-up flow these requirements produce is described in
 [../QUICKSTART.md](../QUICKSTART.md).
 
@@ -174,7 +174,7 @@ sample's writer: its participant name).
   agent's own row: app `node_agent`. Disposed on a clean stop.
 - Type in `interfaces/common/protorig.idl`, checked like the others.
 
-## N13. Switching QoS variant  [new, under review]
+## N13. Switching QoS variant  [approved 30 Sep 2026, not built]
 
 Replaces the note protocol (S1-S9 in docs/WORKFLOW.md): the agent receives
 the request itself, so the app never has to pass a message to its launcher.
@@ -185,18 +185,35 @@ the request itself, so the app never has to pass a message to its launcher.
   - the app is in this node's list and RUNNING, else refused;
   - the variant already in use: ignored and logged;
   - a variant that is not a profile in the QoS files: refused, WARNING alert
-    `variant:<app>`.
+    `variant:<app>`. The agent reads the same QoS file list as the app
+    (repo, scenario and node files), so a scenario's own variants are known.
 - V3. The switch: AppState RESTARTING ("switching to X, by <sender>"); polite
   stop (forced after 10 s); start again with the `run:` entry's arguments,
   `--qos-variant X` replacing any given there.
-- V4. The new variant fails (exits with an error within 5 s): started once
-  more on the previous variant, WARNING alert `variant:<app>` ("rolled
-  back"). If that fails within 5 s too: CRASHED, CRITICAL alert, no more
-  tries.
+- V4. Success = the app's first heartbeat REPORTING THE NEW VARIANT arrives
+  within 15 s (room for the Pi's slower start). Anything else (exits, hangs
+  while starting, reports another variant) is a failure: started once more
+  on the previous variant, WARNING alert `variant:<app>` ("rolled back"). If
+  the rollback doesn't succeed by the same test: CRASHED, CRITICAL alert, no
+  more tries. Apps that never heartbeat: failure = exits with an error
+  within 5 s.
 - V5. A variant lasts until the app is stopped: a later `CMD_START_APP`
   uses the `run:` entry as written.
 - V6. Every heartbeat carries the variant in effect (as today), so the
   Control Panel shows what happened, not what it asked for.
+- V7. The restart gap is expected, not a fault: the switched app's data
+  pauses for a few seconds and its history starts empty (e.g. a trend plot
+  restarts). While RESTARTING the agent raises no hang alert and the
+  display shows "switching", not "lost". The typical gap is measured by the
+  tests on a desk and on the Pi at bring-up.
+- V8. A variant must never stop data flowing. A switch changes one app
+  only; its peers keep the default QoS. `protorig check` therefore requires,
+  for every topic a variant touches: variant writer compatible with the
+  default reader, and default writer compatible with the variant reader
+  (plus the existing rule against external nodes' writers).
+  `Variant.Alert.BestEffort` changes to reader-side only (as written, its
+  writer side would stop every alert); the demo beat switches the alert
+  reader (`result_gui`).
 - Without an agent (`run --node`, `run --app`, hand-started): no variant
   switching; the app ignores the command.
 

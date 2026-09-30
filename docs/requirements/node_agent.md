@@ -7,7 +7,7 @@ Status: UNDER REVIEW (30 Sep 2026). Nothing here is built yet.
 - N9-N10: moved to run.md as U11-U12.
 - N11-N12: approved in outline, detail review pending.
 - N13 (variant switching, replaces the note protocol S1-S9): approved 30 Sep 2026.
-- N14 (what an app obeys): new, under review.
+- N14 (what an app obeys): approved 30 Sep 2026.
 The bring-up flow these requirements produce is described in
 [../QUICKSTART.md](../QUICKSTART.md).
 
@@ -217,18 +217,29 @@ the request itself, so the app never has to pass a message to its launcher.
 - Without an agent (`run --node`, `run --app`, hand-started): no variant
   switching; the app ignores the command.
 
-## N14. What an app obeys (fw.App and fw::App)  [new, under review]
+## N14. What an app obeys (fw.App and fw::App)  [approved 30 Sep 2026, not built]
 
-- By default an app obeys only `CMD_SET_PARAM` addressed to it; it reads
-  `--qos-variant` once, at start. Every other command is ignored.
-- Opt-in `obeys={CMD_STOP_APP, CMD_KILL_APP}`: for sim twins only (they have
-  no agent, like their hardware). `tc397_twin` already declares it; its
-  requirements R1-R9 don't change.
+- By default an app obeys only `CMD_SET_PARAM` addressed to it (its node or
+  `*`, and its own app name; `target_app` `*` is ignored, since parameter
+  names differ per app). The value changes live and `on_param` is called; an
+  unknown parameter name is logged and ignored.
+- It reads `--qos-variant` once, at start (unknown variant: clear message,
+  exit; the agent's V4 then rolls back).
+- Every other command is ignored. Commands for other apps: silently. A
+  command naming this app that isn't its to handle: one log line saying who
+  handles it (e.g. "variant switching needs an agent: restart with
+  --qos-variant X").
+- Opt-in `obeys={CMD_STOP_APP, CMD_KILL_APP}`: for sim twins (they have no
+  agent, like their hardware). fw.App obeys opt-in commands only when they
+  name the app exactly, never `*` (N4). `tc397_twin` already declares it; its
+  requirements R1-R9 don't change. No `check` rule: a managed app that opted
+  in would just be stopped twice, which is harmless.
 - Removed from fw.App: the variant-switch code, `PROTORIG_RESTART_FILE`,
-  exit code 75 and the note functions (`write_note`, `read_note`,
-  `new_note_path`). The rollback decision stays in `fw.supervise`, used by the
-  agent.
-- Kept: the launcher watch (N6: an app stops if its launcher dies).
-- The C++ `fw::App` and the Micro C layer follow the same rule.
-- Tests reworked: the Python-layer tests that switch variants or stop a probe
-  by command move to agent tests or use Ctrl-C.
+  exit code 75, and `write_note`, `read_note`, `new_note_path`. The rollback
+  decision stays in `fw.supervise`, used by the agent (N13 V4).
+- Kept: the launcher watch (N6: an app stops within about 1 s if its
+  launcher dies).
+- The C++ `fw::App` and the Micro C layer follow the same rules.
+- Tests: variant-switch tests move to the agent's tests; tests that stop a
+  probe by command use Ctrl-C; the note tests are deleted; the twin's R7
+  tests stay, plus a new one: the twin ignores stop and kill sent to `*`.

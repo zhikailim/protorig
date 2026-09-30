@@ -442,7 +442,12 @@ scenarios/<name>/test_<name>.py     # each scenario, from its README's acceptanc
 - Root `conftest.py`: fixtures `bus` (session) and `start_app` (stops every app it started). Skips with the reason when Connext or a license is missing.
 - `./protorig test [app ...] [-k expr]`: runs check, then pytest on `tests/`, `apps/`, `scenarios/` (or the named apps). Non-zero if either fails.
 
-#### Switching QoS variant (rules S1–S7)
+#### Switching QoS variant (rules S1–S9)
+
+> **Being replaced (proposed 30 Sep 2026, under review):** the agent will
+> switch variants itself by restarting the app, so this note protocol goes
+> away. See N13 and N14 in [requirements/node_agent.md](requirements/node_agent.md).
+> The rules below describe what is built today.
 
 New QoS for immutable policies means new DDS entities, so the app has to restart. An app can't restart itself portably (Windows has no real `exec`), so it asks its **launcher**, which is always on the same machine (`node_agent` on the rig, `protorig run` on a desk, the test harness in tests). Nothing crosses the network except the DDS command and the heartbeat. The protocol is language-neutral, so C/C++ apps follow it too.
 

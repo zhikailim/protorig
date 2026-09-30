@@ -1,7 +1,13 @@
 # node_agent and run --live: requirements
 
-Status: UNDER REVIEW (30 Sep 2026). N1-N8 approved in detail; N11-N12 approved
-in outline, still to be reviewed in detail (N9-N10 moved to run.md as U11-U12). Nothing here is built yet.
+Status: UNDER REVIEW (30 Sep 2026). Nothing here is built yet.
+- N1-N3, N5-N8: approved in detail.
+- N4: REVISED 30 Sep 2026 (the agent owns the process, the app owns its
+  behaviour); the revision is under review.
+- N9-N10: moved to run.md as U11-U12.
+- N11-N12: approved in outline, detail review pending.
+- N13 (variant switching, replaces the note protocol S1-S9) and N14 (what an
+  app obeys): new, under review.
 The bring-up flow these requirements produce is described in
 [../QUICKSTART.md](../QUICKSTART.md).
 
@@ -56,15 +62,29 @@ can be brought up and controlled from one machine.
   (no writers). Change in fw.App; C++ fw::App follows the same rule.
 - Not included: machine CPU and memory (deferred; see WORKFLOW.md).
 
-## N4. Commands the agent obeys  [approved]
+## N4. Commands the agent obeys  [REVISED 30 Sep 2026, under review]
 
-- `_sys/DemoControl` with `target_node` = its node or `*` and EMPTY
-  `target_app` (non-empty = addressed to that app itself).
-- `CMD_START_APP <app>|*`: start with the `run:` entry's arguments; already
-  running is ignored and logged; UNAVAILABLE refused.
-- `CMD_STOP_APP <app>|*`: polite stop, forced after 10 s.
-- `CMD_KILL_APP <app>|*`: immediate forced stop (works on hung apps).
-- `CMD_SET_QOS_VARIANT`, `CMD_SET_PARAM`: not agent commands; ignored, logged.
+Rule: the agent owns the process, the app owns its behaviour.
+
+| Command | Handled by | Why |
+|---|---|---|
+| `CMD_START_APP`, `CMD_STOP_APP`, `CMD_KILL_APP` | the node's agent | starting and ending processes; kill works on hung apps; alerts name the sender |
+| `CMD_SET_QOS_VARIANT` | the node's agent (N13) | a variant switch is a restart with a different argument |
+| `CMD_SET_PARAM` | the app itself (N14) | only the app holds the value; the change is live, no restart |
+
+- Addressing is the same for every command: `target_node` = the node (or
+  `*`), `target_app` = the app's name (or `*`, start/stop/kill only). The
+  command type decides who acts, so the Control Panel never has to choose a
+  route. (Changed from the approved N4, which used an empty `target_app` plus
+  the app name in `arg`; the new form matches the IDL's own comments.)
+- Sim twins have no agent (like the hardware they stand in for) and obey
+  stop and kill themselves (N14).
+- `CMD_START_APP`: start with the `run:` entry's arguments; already running is
+  ignored and logged; UNAVAILABLE refused.
+- `CMD_STOP_APP`: polite stop, forced after 10 s.
+- `CMD_KILL_APP`: immediate forced stop (works on hung apps). Nothing is
+  said on the network, like a crash.
+- `CMD_SET_PARAM`: not the agent's; ignored silently (the app acts on it).
 - A command is acted on once per `cmd_id`. Senders make ids unique (time in ns
   plus a random part); the agent remembers the last 1,000 ids.
 - One at a time, in arrival order. The agent never acts on itself
@@ -85,8 +105,8 @@ can be brought up and controlled from one machine.
 ## N6. Supervision  [approved]
 
 - Shared supervisor (`fw.supervise.Supervised`), as `run` and the tests.
-- Restart rules S1-S9 (docs/WORKFLOW.md), including all-or-nothing notes (S8)
-  and no leftover note folders (S9).
+- Variant switches by the agent itself (N13). (Was: the note protocol S1-S9,
+  replaced if N13 is approved.)
 - Crash: CRASHED, alert (N7), no automatic restart; other apps carry on.
 - Stop: polite, forced after 10 s (then KILLED, "forced after 10 s").
 - If the agent dies, its apps notice (launcher process ID, checked each second
@@ -143,3 +163,45 @@ sample's writer: its participant name).
 - Keyed by node + app; reliable; latest state kept for late joiners. The
   agent's own row: app `node_agent`. Disposed on a clean stop.
 - Type in `interfaces/common/protorig.idl`, checked like the others.
+
+## N13. Switching QoS variant  [new, under review]
+
+Replaces the note protocol (S1-S9 in docs/WORKFLOW.md): the agent receives
+the request itself, so the app never has to pass a message to its launcher.
+
+- V1. `CMD_SET_QOS_VARIANT`, `target_app` = one app (not `*`), `arg` = the
+  variant (`""` = back to the default).
+- V2. Checks, before anything is stopped:
+  - the app is in this node's list and RUNNING, else refused;
+  - the variant already in use: ignored and logged;
+  - a variant that is not a profile in the QoS files: refused, WARNING alert
+    `variant:<app>`.
+- V3. The switch: AppState RESTARTING ("switching to X, by <sender>"); polite
+  stop (forced after 10 s); start again with the `run:` entry's arguments,
+  `--qos-variant X` replacing any given there.
+- V4. The new variant fails (exits with an error within 5 s): started once
+  more on the previous variant, WARNING alert `variant:<app>` ("rolled
+  back"). If that fails within 5 s too: CRASHED, CRITICAL alert, no more
+  tries.
+- V5. A variant lasts until the app is stopped: a later `CMD_START_APP`
+  uses the `run:` entry as written.
+- V6. Every heartbeat carries the variant in effect (as today), so the
+  Control Panel shows what happened, not what it asked for.
+- Without an agent (`run --node`, `run --app`, hand-started): no variant
+  switching; the app ignores the command.
+
+## N14. What an app obeys (fw.App and fw::App)  [new, under review]
+
+- By default an app obeys only `CMD_SET_PARAM` addressed to it; it reads
+  `--qos-variant` once, at start. Every other command is ignored.
+- Opt-in `obeys={CMD_STOP_APP, CMD_KILL_APP}`: for sim twins only (they have
+  no agent, like their hardware). `tc397_twin` already declares it; its
+  requirements R1-R9 don't change.
+- Removed from fw.App: the variant-switch code, `PROTORIG_RESTART_FILE`,
+  exit code 75 and the note functions (`write_note`, `read_note`,
+  `new_note_path`). The rollback decision stays in `fw.supervise`, used by the
+  agent.
+- Kept: the launcher watch (N6: an app stops if its launcher dies).
+- The C++ `fw::App` and the Micro C layer follow the same rule.
+- Tests reworked: the Python-layer tests that switch variants or stop a probe
+  by command move to agent tests or use Ctrl-C.

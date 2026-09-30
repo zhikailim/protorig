@@ -4,7 +4,11 @@ Status (30 Sep 2026):
 - U1-U10 and D1-D3: approved 29 Sep 2026, built and tested.
 - B1-B7: added while building; approved 30 Sep 2026.
 - U2 (changed): approved 30 Sep 2026 as part of node_agent (N2); not built yet.
-- U11-U12 (--live): moved here from node_agent (N9, N10); under review.
+- U11 (--live): moved here from node_agent (N9); approved 30 Sep 2026, not built.
+- U12 (where --live runs): moved here from node_agent (N10); simpler rule
+  proposed 30 Sep 2026, awaiting approval.
+- U7 (restart rules): will change if node_agent N13/N14 are approved; `run`
+  then does no variant switching (only agents do).
 
 What it is for: one command starts a scenario, or a single app. On a desk it
 runs the whole scenario on one machine; on the rig, each machine runs its own
@@ -94,30 +98,47 @@ B7. U3 was approved as "shared memory and loopback"; it was built as shared
     Admin Console on the same PC uses shared memory by default.
 
 
-## Under review: --live (moved from node_agent N9, N10)
+## --live (moved from node_agent N9, N10)
 
-U11. `protorig run <scenario> --live` brings the whole rig up through its
+U11. [approved 30 Sep 2026, not built]
+     `protorig run <scenario> --live` brings the whole rig up through its
      agents:
      1. Waits for every managed node's agent, printing who is still
-        missing; lists external nodes once as "power it on".
+        missing; lists external nodes once as "power it on". External
+        nodes are checked by discovering their writers (e.g. the TC397's
+        `Example Temperature`); informational only, never blocks.
      2. Checks every agent runs the same scenario (from the `scenario`
         field in `_sys/AppState`); refuses otherwise, saying which node
         runs what and how to restart it.
-     3. Sends "start *" to every agent.
+     3. Sends "start *" to each agent, one command per node. A node whose
+        apps don't start is sent the same command again after 3 s, with
+        the same `cmd_id` (so an agent that already acted ignores it).
      4. Prints a line in its own terminal as each app changes state (read
         from `_sys/AppState` over DDS; nothing is published back), flags
         apps UNAVAILABLE or not RUNNING within 20 s, then keeps printing
-        changes until Ctrl-C.
+        changes until Ctrl-C. Also printed: alerts as they arrive, and
+        "<node> agent LOST" / "<node> agent back".
      5. Ctrl-C sends "stop *" to every agent, waits up to 15 s for every
-        app to be STOPPED, and reports; the agents stay up.
-     Proposed:
+        app to be STOPPED, and reports; the agents stay up. A second Ctrl-C
+        exits at once without waiting for the report.
+     Also:
      - Waits until every agent is there; `--partial` starts on whichever
        agents are present.
      - Running `--live` again while the demo runs reattaches: shows the
        running apps; Ctrl-C stops them.
-     - A second Ctrl-C exits at once without waiting for the report.
      - While waiting, the message says an agent may be missing because it
        isn't started, is unreachable, or runs a scenario on another domain.
+     - Exit code: 0 = everything started and stopped cleanly; 1 = some app
+       failed; 2 = could not start (agents missing, scenario mismatch,
+       wrong machine).
 
-U12. `--live` runs from a machine that is in the scenario (found by its IP)
-     and uses that machine's discovery settings, so it can reach every node.
+U12. [proposed 30 Sep 2026, awaiting approval]
+     `--live` runs from a machine that is in the scenario, found by its IP:
+     - one node has this machine's IP: use that node;
+     - several nodes share this IP: use the first and say so;
+     - several nodes with different IPs of this machine: refuse, listing
+       them;
+     - none: refuse, exit 2.
+     It uses that node's discovery settings, so it can reach every node,
+     written to its own file `build/<scenario>/<node>/live_qos.xml` (never
+     the agent's). Participant name `<node>/run-live`.

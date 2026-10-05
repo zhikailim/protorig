@@ -112,7 +112,9 @@ def test_interrupt_is_polite():
             "signal.signal(signal.SIGINT, lambda *a: sys.exit(0))\n"
             "if hasattr(signal, 'SIGBREAK'): signal.signal(signal.SIGBREAK, lambda *a: sys.exit(0))\n"
             "print('ready', flush=True)\n"
-            "time.sleep(30)\n")
+            "for _ in range(300): time.sleep(0.1)\n")
+    # Short sleeps, like fw.App's 0.2 s loop: on Windows a Ctrl-Break handler only
+    # runs once Python regains control, and one long sleep(30) would hold it off.
     s = Supervised(_py(code), [], dict(os.environ))
     wait_for(lambda: "ready" in s.lines, 10, "the child to start")
     s.interrupt()

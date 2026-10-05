@@ -83,6 +83,7 @@ def test_late_joiner_sees_every_current_row(bus):
             ("hpc-pi", "logger"): S.APP_CRASHED,
             ("hpc-pi", "node_agent"): S.APP_RUNNING}
         assert got[("hpc-pi", "logger")][1].exit_code == 3
+        assert len(r.select().state(dds.DataState.any).read()) == 3     # keep last 1: no history replayed
     finally:
         if r is not None:
             r.close()

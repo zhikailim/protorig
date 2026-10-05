@@ -22,6 +22,11 @@
           <participant_liveliness_assert_period>
             <sec>2</sec><nanosec>0</nanosec>
           </participant_liveliness_assert_period>
+          <!-- How often expired leases are checked. Connext's default is 60 s, which
+               made the 10 s above really 10 to 70 s (measured). 1 s: dropped at 10 s. -->
+          <max_liveliness_loss_detection_period>
+            <sec>1</sec><nanosec>0</nanosec>
+          </max_liveliness_loss_detection_period>
         </discovery_config>
       </domain_participant_qos>
     </qos_profile>

@@ -164,6 +164,7 @@ class App:
         self.incompatible: list[str] = []          # incompatible-QoS events seen (also logged)
         self._param_callbacks: dict[str, list[Callable]] = {}
         self._on_data: list[tuple] = []
+        self._on_stop: list[Callable[[], None]] = []
         self._timers: list[Timer] = []
         self._running = True
         self._seen_cmds: set[int] = set()
@@ -288,16 +289,21 @@ class App:
         self._waitset.attach_condition(cond)
         self._conditions.append(cond)
 
-    def on_data(self, reader: dds.DataReader, fn: Callable, internal: bool = False) -> None:
-        """Call fn(sample) for every valid sample the reader receives."""
+    def on_data(self, reader: dds.DataReader, fn: Callable, internal: bool = False,
+                with_info: bool = False) -> None:
+        """Call fn(sample) for every valid sample the reader receives.
+        with_info=True: fn(sample, info) instead, with Connext's SampleInfo (who
+        sent it, when): looked up here, at once, while the sender is still known."""
         if self._help_requested:
             return
         def handler():
-            for sample in reader.take_data():
+            for sample, info in reader.take():
+                if not info.valid:
+                    continue
                 if self.verbose and not internal:
                     log(self.who, "DATA", f"{reader.topic_name}: {sample}")
                 try:
-                    fn(sample)
+                    fn(sample, info) if with_info else fn(sample)
                 except Exception:
                     log(self.who, "ERROR", f"in on_data({reader.topic_name}):\n{traceback.format_exc()}")
         cond = dds.ReadCondition(reader, dds.DataState.any_data, lambda _c: handler())
@@ -396,6 +402,12 @@ class App:
             except Exception:
                 log(self.who, "ERROR", f"in on_param({name}):\n{traceback.format_exc()}")
 
+    def on_stop(self, fn: Callable[[], None]) -> None:
+        """Call fn() once the app is stopping, BEFORE its heartbeat is disposed and
+        DDS is closed: its readers and writers still work (e.g. node_agent stops
+        its apps and clears its rows here)."""
+        self._on_stop.append(fn)
+
     # ------------------------------------------------------------------ run / stop
 
     def stop(self, reason: str = "") -> None:
@@ -433,6 +445,11 @@ class App:
                         t.fn()
                     except Exception:
                         log(self.who, "ERROR", f"in every():\n{traceback.format_exc()}")
+        for fn in self._on_stop:
+            try:
+                fn()
+            except Exception:
+                log(self.who, "ERROR", f"in on_stop():\n{traceback.format_exc()}")
         self._dispose_heartbeat()
         self._close()
         log(self.who, "INFO", "stopped")

@@ -3,7 +3,9 @@
 Status: ALL APPROVED (5 Oct 2026). Built so far (step 1 of 5, 5 Oct 2026): the
 fw.App side of N3 (heartbeat disposed on a clean stop), N6 (launcher watch),
 N11 addition 1 (participant named node/app, Python) and N14; the note protocol
-is removed. The agent itself is not built yet.
+is removed. Step 3a (5 Oct 2026): the agent itself, N3-N8 and N11-N13, as
+behaviour rows B1-B27 in apps/tooling/node_agent/README.md. Not built yet: the
+`protorig agent` command (N1, step 3b), --sim through agents (N2, step 4).
 - N1-N3, N5-N8: approved in detail.
 - N4: REVISED and approved 30 Sep 2026 (the agent owns the process, the app
   owns its behaviour).

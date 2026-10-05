@@ -132,9 +132,12 @@ def _check_nodes(s: repo.Scenario, nodes: dict) -> Iterator[Finding]:
             yield Finding(ERROR, where, "sim: is only for external nodes")
 
         # --- managed nodes: the apps they run --------------------------------
-        run = spec.get("run")
-        if not isinstance(run, list) or not run:
-            yield Finding(ERROR, where, "run: must list at least one app (or mark the node external: true)")
+        run = spec.get("run", [])
+        if not isinstance(run, list):
+            yield Finding(ERROR, where, "run: must be a list of apps, e.g. run: [hpc_monitor]")
+            continue
+        if not run:          # N2: allowed; the machine still runs its node agent and shows on the node board
+            yield Finding(WARN, where, "no demo apps in run: yet (its node agent still runs here)")
             continue
         seen_entries = set()
         for entry in run:

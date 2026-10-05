@@ -130,8 +130,7 @@ SCENARIO_BREAKS = [
     ("missing sim app",        _mutated(nodes__ecu__sim="nope_twin"),          "'nope_twin' not found"),
     ("external with run:",     _mutated(nodes__ecu__run=["gui"]),              "external nodes run nothing"),
     ("sim: on managed node",   _mutated(nodes__hpc__sim="ecu_twin"),           "only for external nodes"),
-    ("empty run:",             _mutated(nodes__hpc__run=[]),                   "must list at least one app"),
-    ("no run: at all",         _mutated(nodes__hpc__run=DELETE),               "must list at least one app"),
+    ("run: not a list",        _mutated(nodes__hpc__run="agent"),              "run: must be a list"),
     ("typo in node key",       _mutated(nodes__hpc__rn=["agent"]),             "unknown key 'rn'"),
     ("typo in scenario key",   _mutated(domian=3),                             "unknown key 'domian'"),
     ("unknown os",             _mutated(nodes__hpc__os="ubuntu"),              "os: must be one of"),
@@ -152,6 +151,14 @@ def test_scenario_break_is_reported(fake, label, data, expected):
     fake.scenario(data)
     errors = fake.errors()
     assert any(expected in e for e in errors), f"{label}: expected '{expected}' in {errors}"
+
+
+@pytest.mark.parametrize("run", [[], DELETE])
+def test_node_with_no_demo_apps_is_only_a_warning(fake, run):
+    """N2: a managed machine may run nothing but its node agent."""
+    fake.scenario(_mutated(nodes__hpc__run=run))
+    assert not any("hpc" in e for e in fake.errors()), fake.errors()
+    assert any("no demo apps in run: yet" in w for w in fake.warnings())
 
 
 def test_invalid_yaml_is_reported_not_crashing(fake):

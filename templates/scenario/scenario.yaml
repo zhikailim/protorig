@@ -4,7 +4,9 @@ description: {{description}}
 domain: 0
 
 nodes:
-  # One entry per machine. `run` entries are written like command lines.
-  hpc-vm: { ip: 192.168.1.10, os: linux, run: [node_agent] }
+  # One entry per machine. `run` lists this machine's demo apps, written like
+  # command lines, e.g. run: ["hpc_monitor --strength 20"]. Never node_agent:
+  # every managed machine gets one automatically (node_agent N2).
+  hpc-vm: { ip: 192.168.1.10, os: linux, run: [] }
   # An external node (built outside this repo) with its sim twin for --sim runs:
   # tc397:  { ip: 192.168.1.30, external: true, sim: tc397_twin }

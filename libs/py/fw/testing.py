@@ -54,6 +54,7 @@ from fw.supervise import Supervised
 # temporary range: any program briefly holding the domain's shared discovery
 # port made the whole domain unusable ("automatic participant index failed").
 TEST_DOMAINS = range(60, 100)
+BEST_EFFORT_SETTLE = 0.3   # seconds; see Bus.send
 
 
 def wait_for(condition, timeout: float, what: str = "condition", poll: float = 0.02):
@@ -189,6 +190,13 @@ class Bus:
                         pass
                 return False
             wait_for(matched, match_timeout, f"{who}'s reader of '{topic}' to match")
+        # A match is seen by the writer first. A BEST-EFFORT reader that hasn't yet
+        # learned about this writer drops the sample, and nothing re-sends it (a
+        # reliable one would recover it). The reader's side can't be observed from
+        # here, so give it a moment when any matched reader is best effort.
+        if any(w.matched_subscription_data(h).reliability.kind == dds.ReliabilityKind.BEST_EFFORT
+               for h in w.matched_subscriptions):
+            time.sleep(BEST_EFFORT_SETTLE)
         w.write(make_sample(topic, values))
 
     def listen(self, topic: str, qos: dds.DataReaderQos | None = None) -> Mailbox:

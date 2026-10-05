@@ -433,11 +433,12 @@ def test_new_app_refuses_duplicates_across_kinds(repo_copy):
     assert out.returncode == 1 and "already exists" in out.stdout
 
 
-def test_new_scenario_is_valid_apart_from_unbuilt_apps(repo_copy):
+def test_new_scenario_is_valid(repo_copy):
     assert _protorig(repo_copy, "new", "scenario", "fresh-demo", "--desc", "A test").returncode == 0
     out = _protorig(repo_copy, "check").stdout
-    fresh = [l for l in out.splitlines() if "fresh-demo" in l]
-    assert fresh and all("not found" in l for l in fresh), fresh      # only node_agent, which isn't built yet
+    fresh = [l for l in out.splitlines() if "fresh-demo" in l and "ERROR" in l]
+    assert not fresh, fresh                    # a fresh scenario is valid as generated (no node_agent in run:, N2)
+    assert "no demo apps in run: yet" in out   # ... and says what to add
 
 
 def test_scenario_local_app(repo_copy):

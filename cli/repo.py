@@ -19,29 +19,18 @@ ROOT = Path(__file__).resolve().parent.parent
 CONNEXT_VERSION = "7.7"
 
 # App kinds, in lookup order. The folder an app sits in decides its kind.
-APP_KINDS = ("vehicle", "tooling", "sim")
+APP_KINDS = ("vehicle", "tooling", "sim")       # must equal fw.scenario.APP_KINDS (tests check)
 
 SCENARIO_NAME = re.compile(r"^[a-z][a-z0-9-]*$")      # e.g. my-demo
 APP_NAME = re.compile(r"^[a-z][a-z0-9_]*$")           # e.g. hpc_monitor
 NODE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")          # e.g. hpc-pi
 
 
-@dataclass
-class App:
-    """One app folder, found on disk."""
-    name: str
-    kind: str                  # vehicle | tooling | sim
-    path: Path
-    scope: str                 # "shared" or the scenario name
-
-    @property
-    def language(self) -> str | None:
-        """C/C++ if it has CMakeLists.txt, Python if it has main.py."""
-        if (self.path / "CMakeLists.txt").exists():
-            return "c/c++"
-        if (self.path / "main.py").exists():
-            return "python"
-        return None
+# The app lookup is shared with node_agent: it lives in libs/py/fw/scenario.py.
+import sys as _sys
+_sys.path.insert(0, str(ROOT / "libs" / "py"))
+from fw import scenario as _fw_scenario      # noqa: E402
+from fw.scenario import App                  # noqa: E402,F401  (re-exported: check uses repo.App)
 
 
 @dataclass
@@ -52,34 +41,9 @@ class Scenario:
     error: str | None = None   # set if scenario.yaml could not be read
 
 
-def app_roots(scenario: str | None = None) -> list[tuple[str, Path]]:
-    """Folders apps can live in, most specific first.
-
-    A scenario's own apps (scenarios/<name>/apps/<kind>/) take precedence over
-    the shared ones (apps/<kind>/).
-    """
-    roots = []
-    if scenario:
-        roots.append((scenario, ROOT / "scenarios" / scenario / "apps"))
-    roots.append(("shared", ROOT / "apps"))
-    return roots
-
-
 def find_apps(scenario: str | None = None) -> dict[str, list[App]]:
-    """All apps visible to a scenario (or only shared ones), by name.
-
-    Returns a list per name so duplicates can be reported rather than hidden.
-    """
-    found: dict[str, list[App]] = {}
-    for scope, base in app_roots(scenario):
-        for kind in APP_KINDS:
-            kind_dir = base / kind
-            if not kind_dir.is_dir():
-                continue
-            for p in sorted(kind_dir.iterdir()):
-                if p.is_dir() and not p.name.startswith("."):
-                    found.setdefault(p.name, []).append(App(p.name, kind, p, scope))
-    return found
+    """All apps visible to a scenario (its own first, then shared), by name."""
+    return _fw_scenario.find_apps(ROOT, scenario)      # ROOT read now: tests may point it elsewhere
 
 
 def all_app_dirs() -> list[App]:

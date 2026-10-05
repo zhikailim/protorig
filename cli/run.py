@@ -30,6 +30,8 @@ import repo
 sys.path.insert(0, str(repo.ROOT / "libs" / "py"))
 from fw.app import NODE_QOS_ENV            # noqa: E402
 from fw.supervise import EXIT_KILLED, Supervised   # noqa: E402
+from fw.scenario import command_for                 # noqa: E402  (shared with node_agent)
+from fw import scenario as fw_scenario              # noqa: E402
 
 STOP_GRACE = 10.0      # seconds apps get to stop politely before they are forced
 
@@ -53,15 +55,6 @@ class RunError(Exception):
 
 
 # ------------------------------------------------------------------ planning
-
-def command_for(app: repo.App) -> tuple[list[str] | None, str]:
-    """How to start an app, or why it can't be started yet."""
-    if app.language == "python":
-        return [sys.executable, str(app.path / "main.py")], ""
-    if app.language == "c/c++":
-        return None, "C/C++ app, not built yet (needs `protorig build`)"
-    return None, "no main.py or CMakeLists.txt in its folder"
-
 
 def resolve(scenario: str | None, name: str, node: str, args: list[str], want_sim: bool = False) -> Launch:
     """A Launch for app `name` as seen from `scenario` (its own apps first, then shared)."""
@@ -90,18 +83,10 @@ def load_scenario(name: str) -> dict:
 
 def entries(spec: dict, node: str) -> list[tuple[str, list[str]]]:
     """The (app, args) pairs a node's run: list asks for (U6)."""
-    out = []
-    run = spec.get("run") or []
-    if not isinstance(run, list):
-        raise RunError(f"node '{node}': run: must be a list (run `protorig check`)")
-    for item in run:
-        try:
-            parts = shlex.split(str(item))
-        except ValueError as e:
-            raise RunError(f"node '{node}': can't parse run entry {item!r}: {e}")
-        if parts:
-            out.append((parts[0], parts[1:]))
-    return out
+    try:
+        return fw_scenario.entries(spec, node)
+    except ValueError as e:
+        raise RunError(str(e)) from None
 
 
 def plan_sim(scenario: str, data: dict) -> list[Launch]:

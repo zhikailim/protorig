@@ -1,12 +1,12 @@
 # node_agent and run --live: requirements
 
-Status: UNDER REVIEW (30 Sep 2026). Nothing here is built yet.
+Status: ALL APPROVED (5 Oct 2026). Nothing here is built yet.
 - N1-N3, N5-N8: approved in detail.
 - N4: REVISED and approved 30 Sep 2026 (the agent owns the process, the app
   owns its behaviour).
 - N9-N10: moved to run.md as U11-U12.
 - N11: approved 5 Oct 2026.
-- N12: approved in outline, detail review pending.
+- N12: approved 5 Oct 2026.
 - N13 (variant switching, replaces the note protocol S1-S9): approved 30 Sep 2026.
 - N14 (what an app obeys): approved 30 Sep 2026.
 The bring-up flow these requirements produce is described in
@@ -189,18 +189,57 @@ sends must not stop it mid-demo.
 - For the Control Panel review: `*` means every app, GUIs included; "reset
   the demo, keep the screens up" = one named command per demo app.
 
-## N12. _sys/AppState  [outline approved; detail review pending]
+## N12. _sys/AppState  [approved 5 Oct 2026, not built]
 
-- One sample per (node, app): state (NOT_RUNNING, STARTING, RUNNING,
-  RESTARTING, STOPPING, STOPPED, KILLED, CRASHED, UNAVAILABLE), exit code,
-  restart count, detail, plus:
-  - who caused a command-driven change (e.g. "killed by windows/control_panel");
-  - the time the state last changed (the display measures "how long ago"
-    against its own clock);
-  - the scenario the agent runs (the display flags a mismatch).
-- Keyed by node + app; reliable; latest state kept for late joiners. The
-  agent's own row: app `node_agent`. Disposed on a clean stop.
-- Type in `interfaces/common/protorig.idl`, checked like the others.
+How every agent tells the rig what its apps are doing; read by `result_gui`,
+the Control Panel and `run --live`.
+
+- One row per (node, app), keyed by both; the agent's own row is app
+  `node_agent`. Published only on change (no periodic traffic).
+- States and when the agent sets them:
+
+  | State | Set when | Leaves when |
+  |---|---|---|
+  | NOT_RUNNING | agent starts, for every app in its list | START |
+  | UNAVAILABLE | code missing or not built (detail says which) | rechecked at each START |
+  | STARTING | process launched | first heartbeat (or the "running" line, for apps without one) → RUNNING |
+  | RUNNING | as above | stop, kill, switch, or it ends |
+  | RESTARTING | variant switch or rollback in progress (N13) | new variant confirmed → RUNNING; gave up → CRASHED |
+  | STOPPING | polite stop sent | it ends → STOPPED; 10 s → KILLED |
+  | STOPPED | ended after a stop command; or ended on its own with exit 0 (detail "ended on its own (exit 0)"; N7 raises the WARNING) | START |
+  | KILLED | kill command, or forced after 10 s | START |
+  | CRASHED | ended unasked with an error code, or a rollback gave up | START |
+
+  Still STARTING after 15 s: WARNING alert `start:<app>`.
+- Fields: `node`, `app` (keys); `state`; `exit_code` (meaningful in STOPPED,
+  KILLED, CRASHED); `restarts` (variant switches and rollbacks since the last
+  START); `detail` (one line, e.g. "killed by windows/control_panel", "forced
+  after 10 s", "switching to LongHistory", "not built", the last output line
+  on a crash, "not responding"); `scenario` (the agent's scenario, used by
+  `run --live`, U11); `changed_at` (agent's clock).
+- Delivery: reliable, latest row kept for late joiners. Disposed on a clean
+  agent stop.
+- Robustness:
+  1. A node's rows show "unknown: agent lost" as soon as its agent's
+     heartbeat is lost (3 s), not when the DDS writer goes (participant
+     lease, 10 s). Applies to `result_gui` and `run --live`.
+  2. Two agents for one node: an agent keeps listening for another agent
+     heartbeat claiming its node, for as long as it runs. If it hears one,
+     the agent whose participant ID compares higher stops its apps and
+     exits; both raise CRITICAL "two agents for <node>".
+  3. A hung app (N7) stays RUNNING with detail "not responding", cleared when
+     it recovers. No new state.
+  4. The process exit is final: CRASHED, STOPPED and KILLED come from the
+     exit, never from a missing heartbeat. A heartbeat only moves STARTING
+     to RUNNING or confirms a variant (N13 V4).
+  5. `detail` is trimmed to fit at a character boundary, ending in "…".
+- Clocks: every rig machine's clock is synced to Windows (bootstrap step);
+  the display compares each heartbeat's send time with its arrival time and
+  warns "<node> clock off by N s" above 1 s (result_gui requirement).
+- Not covered: apps started by hand have no row; the display labels their
+  heartbeats "unmanaged".
+- New states are only ever added at the end of the list; `check`'s contract
+  lock catches a reorder. Type in `interfaces/common/protorig.idl`.
 
 ## N13. Switching QoS variant  [approved 30 Sep 2026, not built]
 

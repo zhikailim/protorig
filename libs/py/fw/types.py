@@ -106,6 +106,39 @@ class DemoControl:
     value: float = 0.0
 
 
+@_enum("protorig::AppStateKind")
+class AppStateKind(IntEnum):
+    APP_NOT_RUNNING = 0
+    APP_UNAVAILABLE = 1
+    APP_STARTING = 2
+    APP_RUNNING = 3
+    APP_RESTARTING = 4
+    APP_STOPPING = 5
+    APP_STOPPED = 6
+    APP_KILLED = 7
+    APP_CRASHED = 8
+
+
+@idl.struct(
+    type_annotations=[idl.type_name("protorig::AppState"), APPENDABLE],
+    member_annotations={
+        "node": [idl.key, idl.bound(32)],
+        "app": [idl.key, idl.bound(32)],
+        "detail": [idl.bound(128)],
+        "scenario": [idl.bound(64)],
+    },
+)
+class AppState:
+    node: str = ""
+    app: str = ""
+    state: AppStateKind = AppStateKind.APP_NOT_RUNNING
+    exit_code: idl.int32 = 0
+    restarts: idl.uint32 = 0
+    detail: str = ""
+    scenario: str = ""
+    changed_at_ns: idl.int64 = 0
+
+
 # ============================================================================
 # interfaces/common/alerts.idl
 # ============================================================================
@@ -143,6 +176,8 @@ BY_IDL_NAME = {
     "protorig::NodeStatus": NodeStatus,
     "protorig::Command": Command,
     "protorig::DemoControl": DemoControl,
+    "protorig::AppStateKind": AppStateKind,
+    "protorig::AppState": AppState,
     "alerts::Severity": Severity,
     "alerts::Alert": Alert,
 }

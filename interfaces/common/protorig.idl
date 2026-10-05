@@ -3,7 +3,8 @@
  *
  * Used on the _sys/ topics (see docs/WORKFLOW.md, naming conventions):
  *   _sys/NodeStatus   heartbeat from every app, via fw::App / fw.app
- *   _sys/DemoControl  commands from the Control Panel, carried out by node_agent
+ *   _sys/DemoControl  commands from the Control Panel (node_agent N4)
+ *   _sys/AppState     what each node agent's apps are doing (node_agent N12)
  *
  * Design rules, so these can later run on Connext Micro or Cert unchanged:
  *   - bounded strings only (string<N>), no unbounded sequences
@@ -26,24 +27,56 @@ module protorig {
         long long          stamp_ns;      // sender's wall clock, ns since the Unix epoch
     };
 
+    // Who carries out each command (node_agent N4): the node agent starts,
+    // stops, kills and switches QoS variant (by restarting the app); the app
+    // itself only changes parameters.
     enum Command {
-        CMD_SET_QOS_VARIANT,   // arg = variant name ("" = back to default); app restarts
-        CMD_START_APP,         // target_app starts (as listed in the scenario)
-        CMD_STOP_APP,          // clean stop
+        CMD_SET_QOS_VARIANT,   // arg = variant name ("" = back to default); the agent restarts the app
+        CMD_START_APP,         // starts as listed in the scenario's run: entry
+        CMD_STOP_APP,          // clean stop (forced after 10 s)
         CMD_KILL_APP,          // abrupt kill, for failover demos
-        CMD_SET_PARAM          // arg = parameter name, value = new value
+        CMD_SET_PARAM          // arg = parameter name, value = new value; done by the app, live
     };
 
     // A command from the Control Panel. target_node "*" = every node.
-    // cmd_id increases per command, so a node can ignore repeats.
+    // cmd_id is unique per command, so a repeat is acted on only once.
     @appendable
     struct DemoControl {
         @key string<32>    target_node;
-        string<32>         target_app;    // "" = the node itself
+        string<32>         target_app;    // the app, or "*" = every app on the node (start/stop/kill only)
         unsigned long long cmd_id;
         Command            command;
         string<64>         arg;
         double             value;
+    };
+
+    // The states of one app, set by its node agent (node_agent N12).
+    // The order is part of the wire format: new states only ever at the end.
+    enum AppStateKind {
+        APP_NOT_RUNNING,       // in the node's list, not started since the agent started
+        APP_UNAVAILABLE,       // code missing or not built (detail says which)
+        APP_STARTING,          // launched, no heartbeat (or "running" line) yet
+        APP_RUNNING,
+        APP_RESTARTING,        // QoS variant switch or rollback in progress
+        APP_STOPPING,          // polite stop sent
+        APP_STOPPED,           // ended after a stop, or on its own with exit 0
+        APP_KILLED,            // kill command, or forced after 10 s
+        APP_CRASHED            // ended unasked with an error code, or a rollback gave up
+    };
+
+    // One row per app per node, published by that node's agent on every change.
+    // Keyed by (node, app); the latest row is kept for displays that join late.
+    // The agent disposes its rows when it stops cleanly.
+    @appendable
+    struct AppState {
+        @key string<32>    node;          // e.g. "hpc-pi"
+        @key string<32>    app;           // e.g. "hpc_monitor"; the agent's own row: "node_agent"
+        AppStateKind       state;
+        long               exit_code;     // meaningful in STOPPED, KILLED, CRASHED
+        unsigned long      restarts;      // variant switches and rollbacks since the last START
+        string<128>        detail;        // one line, e.g. "killed by windows/control_panel"
+        string<64>         scenario;      // the agent's scenario (run --live checks it)
+        long long          changed_at_ns; // agent's wall clock, ns since the Unix epoch
     };
 
 }; // module protorig

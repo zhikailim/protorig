@@ -71,6 +71,21 @@
         </liveliness>
       </datareader_qos>
 
+      <!-- ============ _sys/AppState: one row per app; late joiners see every row ============ -->
+      <!-- Keep last 1 per (node, app): only the latest state matters. No deadline or
+           liveliness here: a lost machine is judged by its agent's heartbeat (3 s),
+           faster than this writer going away (node_agent N12, rule 1). -->
+      <datawriter_qos topic_filter="_sys/AppState">
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+      </datawriter_qos>
+      <datareader_qos topic_filter="_sys/AppState">
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+      </datareader_qos>
+
       <!-- ============ _sys/DemoControl: a button press must arrive ============ -->
       <datawriter_qos topic_filter="_sys/DemoControl">
         <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>

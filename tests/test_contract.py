@@ -433,7 +433,12 @@ def test_python_types_work_on_the_wire():
             "_sys/NodeStatus": types.NodeStatus(node="hpc-pi", app="node_agent", os="linux", seq=7, cpu_load=0.25),
             "_sys/DemoControl": types.DemoControl(target_node="*", cmd_id=1, command=types.Command.CMD_KILL_APP,
                                                   target_app="hpc_monitor"),
+            "_sys/AppState": types.AppState(node="hpc-pi", app="hpc_monitor", state=types.AppStateKind.APP_KILLED,
+                                            exit_code=137, restarts=1, detail="killed by windows/control_panel",
+                                            scenario="sample-scenario", changed_at_ns=time.time_ns()),
         }
+        assert set(samples) == {t for t in topics.TOPICS if t.startswith("_sys/") or t == "Alert"}, \
+            "every framework topic needs a sample here"
         for name, sample in samples.items():
             t = dds.Topic(p, name, topics.type_of(name))
             w = dds.DataWriter(dds.Publisher(p), t, provider.get_topic_datawriter_qos(name))

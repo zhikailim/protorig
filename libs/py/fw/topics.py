@@ -18,6 +18,7 @@ TOPICS = {
     # framework plumbing
     "_sys/NodeStatus": "protorig::NodeStatus",
     "_sys/DemoControl": "protorig::DemoControl",
+    "_sys/AppState": "protorig::AppState",
 }
 
 

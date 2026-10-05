@@ -45,7 +45,7 @@ import rti.connextdds as dds
 from fw import topics as fw_topics
 from fw import types as T
 from fw.app import DEFAULT_PROFILE, ROOT, qos_files
-from fw.supervise import Supervised, new_note_path
+from fw.supervise import Supervised
 
 # Test domains: never 0 or the low numbers a live rig uses, and all BELOW the
 # operating system's range of temporary ports (Linux 32768-60999, Windows
@@ -233,14 +233,13 @@ def find_app(name: str) -> tuple[str, Path]:
 
 
 class RunningApp(Supervised):
-    """An app started by a test, supervised exactly like `protorig run` and
-    node_agent supervise theirs (fw.supervise.Supervised): restarted on a QoS
-    variant switch, one handle across restarts. Adds the app's name and node."""
+    """An app started by a test, run exactly like `protorig run` and node_agent
+    run theirs (fw.supervise.Supervised). Adds the app's name and node."""
 
     def __init__(self, name: str, node: str, cmd: list[str], args: list[str], env: dict,
-                 note: Path | None, own_note_dir: bool = False):
+                 watch_launcher: bool = True):
         self.name, self.node = name, node
-        super().__init__(cmd, args, env, note, own_note_dir=own_note_dir)
+        super().__init__(cmd, args, env, watch_launcher=watch_launcher)
 
     def wait_exit(self, timeout: float = 5.0) -> int:
         try:
@@ -264,10 +263,9 @@ class AppLauncher:
         Waits until it is ready: its first heartbeat, or with wait_heartbeat=False
         (apps without one, e.g. sim twins) its "running" log line. Raises if it
         exits during start-up, unless wait_heartbeat=False (tests of start-up errors).
-        supervised=False starts it like a person would by hand: no launcher to
-        restart it (so it refuses QoS variant switches, rule S3).
+        supervised=False starts it like a person would by hand: no launcher
+        process ID for it to watch (N6).
         env: extra environment variables for the app."""
-        from fw.supervise import RESTART_ENV
         if folder is None:
             _, folder = find_app(name)
         folder = Path(folder)
@@ -278,15 +276,9 @@ class AppLauncher:
         full_env = dict(os.environ)
         full_env["PYTHONPATH"] = str(ROOT / "libs" / "py") + os.pathsep + full_env.get("PYTHONPATH", "")
         full_env["PYTHONUNBUFFERED"] = "1"
-        env = dict(env or {})
-        note, own = None, False
-        if supervised:                    # a test may name its own note path (e.g. an unwritable one)
-            given = env.pop(RESTART_ENV, None)
-            note, own = (Path(given), False) if given else (new_note_path(name), True)
-        env.pop(RESTART_ENV, None)
-        full_env.update(env)
+        full_env.update(env or {})
         app = RunningApp(name, node, cmd, ["--node", node, "--domain", str(self.bus.domain), *args],
-                         full_env, note, own_note_dir=own)
+                         full_env, watch_launcher=supervised)
         self.running.append(app)
         if wait_heartbeat:
             beats = self.bus.listen("_sys/NodeStatus")

@@ -7,8 +7,9 @@ The app runs as a separate process; these tests talk to it only over DDS
 The three standard tests below work as-is for every app. Add behaviour tests
 from the app's given/when/then table; pattern: LISTEN, then ACT, then CHECK.
 """
+import time
+
 from fw import types as T
-from fw.app import EXIT_KILLED
 from fw.testing import wait_for
 
 
@@ -20,20 +21,22 @@ def test_starts_and_heartbeats(bus, start_app):
 
 
 def test_clean_stop(bus, start_app):
+    """Ctrl-C (how `protorig run` and the node agent stop an app) ends it cleanly."""
     app = start_app("{{name}}")
-    bus.command(app, T.Command.CMD_STOP_APP)
+    app.interrupt()
     assert app.wait_exit(5) == 0
     assert "stopped" in app.output
 
-    app2 = start_app("{{name}}")                      # Ctrl-C must also stop it cleanly
-    app2.interrupt()
-    assert app2.wait_exit(5) in (0, -15, 1)            # 0 on Linux/macOS; Windows can't send Ctrl-C to a child
 
-
-def test_kill_command(bus, start_app):
+def test_leaves_start_stop_kill_to_the_agent(bus, start_app):
+    """Stop, kill and QoS-variant commands are the node agent's job (N14):
+    sent to the app itself, they are ignored and it keeps running."""
     app = start_app("{{name}}")
-    bus.command(app, T.Command.CMD_KILL_APP)
-    assert app.wait_exit(5) == EXIT_KILLED
+    for cmd in (T.Command.CMD_STOP_APP, T.Command.CMD_KILL_APP, T.Command.CMD_SET_QOS_VARIANT):
+        bus.command(app, cmd)
+    wait_for(lambda: app.output.count("ignoring ") >= 3, 3, "three 'ignoring' log lines")
+    time.sleep(0.5)
+    assert not app.exited()
 
 
 # --- behaviour tests: one per row of the given/when/then table -----------------

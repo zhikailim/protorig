@@ -172,8 +172,24 @@ def test_R7_ignores_other_commands(bus, start_app):
     wait_for(lambda: app.output.count("ignoring ") >= 4, 3, "four 'ignoring' log lines")
     n = got.count()
     wait_for(lambda: got.count() >= n + 10, 3, "data to keep flowing")
-    assert app.restarts == 0 and not app.exited()
+    assert not app.exited()
     assert "switching QoS variant" not in app.output
+
+
+def test_R7_ignores_stop_and_kill_sent_to_everyone(bus, start_app):
+    """N4/N14: a twin obeys stop and kill only when named exactly. A "stop all"
+    from the Control Panel leaves it running, just as it leaves the real ECU
+    running on the rig."""
+    app = start_twin(start_app)
+    got = bus.listen(TOPIC)
+    for node, target in (("*", "tc397_twin"), ("*", "*"), ("twin-node", "*")):
+        for cmd in (T.Command.CMD_STOP_APP, T.Command.CMD_KILL_APP):
+            bus._cmd_id += 1
+            bus.send("_sys/DemoControl", T.DemoControl(target_node=node, target_app=target,
+                                                       cmd_id=bus._cmd_id, command=cmd), to=app)
+    n = got.count()
+    wait_for(lambda: got.count() >= n + 10, 3, "data to keep flowing")
+    assert not app.exited()
 
 
 # --- R8 ----------------------------------------------------------------------------
@@ -252,6 +268,5 @@ def test_fuzz_control_commands(bus, start_app):
     n = got.count()
     wait_for(lambda: got.count() >= n + 20, 5, "data to keep flowing")
     assert not app.exited(), app.output
-    assert app.restarts == 0, app.output
     assert "Traceback" not in app.output, app.output
     assert all(s.temperature == firmware_temperature(cycle_of(s)) for s in got.all())

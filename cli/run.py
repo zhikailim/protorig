@@ -7,9 +7,10 @@ run.py — `protorig run`: start a scenario, one node of it, or one app (U1-U10)
     protorig run <scenario> --node <node>        this machine's part of the real rig (U4, U5)
     add --dry-run to see what would start, --domain N to override the domain
 
-Every app is supervised by fw.supervise.Supervised, the same code the tests use
-(U7): a QoS-variant switch restarts it; a crash is reported and the rest keep
-running (decision 2). Apps that don't exist or aren't built yet are listed and
+Every app is run by fw.supervise.Supervised, the same code the tests use (U7):
+it stops by itself if `run` dies (N6); a crash is reported and the rest keep
+running (decision 2). QoS-variant switches are the node agent's job (N13), so
+an app started by `run` ignores them. Apps that don't exist or aren't built yet are listed and
 skipped (decisions 1 and 3). Ctrl-C stops everything politely (U9).
 """
 from __future__ import annotations
@@ -28,7 +29,7 @@ import repo
 
 sys.path.insert(0, str(repo.ROOT / "libs" / "py"))
 from fw.app import NODE_QOS_ENV            # noqa: E402
-from fw.supervise import EXIT_KILLED, Supervised, new_note_path   # noqa: E402
+from fw.supervise import EXIT_KILLED, Supervised   # noqa: E402
 
 STOP_GRACE = 10.0      # seconds apps get to stop politely before they are forced
 
@@ -174,9 +175,8 @@ def start_all(plan: list[Launch], common: list[str], env: dict, console: Console
         if l.cmd is None:
             continue
         running[l.who] = Supervised(
-            l.cmd, ["--node", l.node, *common, *l.args], env, new_note_path(l.app), own_note_dir=True,
-            on_line=lambda text, who=l.who: console.line(who, text),
-            on_event=lambda msg, who=l.who: console.line(who, f"[run] {msg}"))
+            l.cmd, ["--node", l.node, *common, *l.args], env,
+            on_line=lambda text, who=l.who: console.line(who, text))
         console.run(f"started {l.who}")
     return running
 

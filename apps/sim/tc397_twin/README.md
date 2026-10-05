@@ -29,7 +29,7 @@ Source of truth: the TC397 application source (`TASK(DDS_Subscriber_task)`) and 
 | R4 | `temperature` ramps 10.0 → 15.0 in 0.1 steps, wraps to 10.0; `variance` always 0.1; the ramp restarts at 10.0 when the twin restarts | `test_R4_R5_R6_every_sample_follows_the_firmware`, `test_R4_ramp_wraps`, `test_R4_R6_restart_resets` |
 | R5 | `header.frame_id` always `"sensor_frame"` | `test_R4_R5_R6_every_sample_follows_the_firmware` |
 | R6 | `header.stamp` starts at 0.100 s and goes up 100 ms per cycle, not wall-clock time; resets on restart | `test_R4_R5_R6_every_sample_follows_the_firmware`, `test_R4_R6_restart_resets` |
-| R7 | Obeys Control Panel stop and kill (kill = power loss) and ignores every other command (the ECU can't switch QoS variant or change parameters); sends no `_sys/NodeStatus` heartbeat | `test_R7_no_heartbeat`, `test_R7_stop`, `test_R7_kill`, `test_R7_ignores_other_commands`, `test_fuzz_control_commands` |
+| R7 | Obeys Control Panel stop and kill (kill = power loss) and ignores every other command (the ECU can't switch QoS variant or change parameters); sends no `_sys/NodeStatus` heartbeat | `test_R7_no_heartbeat`, `test_R7_stop`, `test_R7_kill`, `test_R7_ignores_other_commands`, `test_R7_ignores_stop_and_kill_sent_to_everyone` (named exactly only, never `*`: node_agent N4), `test_fuzz_control_commands` |
 | R8 | Publishes only the topics in `external/tc397/external.yaml` | `test_R8_publishes_only_the_ecu_topics` |
 | R9 | Participant liveliness lease equals the ECU's (`external.yaml`, value to confirm at bring-up) | `test_R9_lease_matches_ecu` |
 

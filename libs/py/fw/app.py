@@ -21,15 +21,18 @@ What App does for you, so apps contain only their own logic:
   - participant named "<node>/<app>", so Admin Console shows who's who
   - a 1 Hz heartbeat on _sys/NodeStatus (heartbeat=False turns it off: sim twins
     of external nodes, which must not publish anything the real node doesn't)
-  - obeys _sys/DemoControl addressed to this app: stop, kill, switch QoS
-    variant, set a parameter (obeys=... limits which; a sim twin obeys only
-    what its real node could). A variant switch needs new DDS entities, so the
-    app asks its launcher to restart it (exit 75 + a note; rules in
-    fw/supervise.py). Started by hand, with no launcher, it refuses the switch
-    and stays up.
+  - obeys only CMD_SET_PARAM addressed to it (node_agent N14): starting,
+    stopping, killing and QoS-variant switches are the node agent's job, which
+    restarts the app with --qos-variant (N4, N13). A sim twin, which has no
+    agent, opts in to stop and kill with obeys={CMD_STOP_APP, CMD_KILL_APP};
+    those are obeyed only when its node is named exactly, never "*".
+  - stops cleanly once its launcher is gone (PROTORIG_LAUNCHER_PID, N6), so
+    a restarted launcher never finds duplicates still running
   - logs incompatible-QoS events: when a reader and writer refuse to match,
     you see why instead of silence
-  - clean shutdown on Ctrl-C / SIGTERM (the participant leaves discovery)
+  - clean shutdown on Ctrl-C / Ctrl-Break / SIGTERM: the heartbeat is
+    disposed (readers see "stopped on purpose", not "lost"; N3), then the
+    participant leaves discovery
 
 A shortcut, never a wall: app.participant and every reader/writer are the real
 Connext objects, and participant_qos=fn lets an app adjust the participant QoS
@@ -52,7 +55,7 @@ import rti.connextdds as dds
 import yaml
 
 from fw import topics as fw_topics
-from fw.supervise import EXIT_KILLED, EXIT_RESTART, RESTART_ENV, write_note
+from fw.supervise import EXIT_KILLED, LAUNCHER_ENV, process_alive
 from fw import types as T
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -62,14 +65,32 @@ QOS_FILES = ("base.xml", "topics.xml", "variants.xml")
 DEFAULT_PROFILE = "protorig::Topics"
 VARIANT_LIBRARY = "protorig_variants"
 HEARTBEAT_PERIOD = 1.0
-ALL_COMMANDS = frozenset(T.Command)
+LAUNCHER_CHECK_PERIOD = 1.0
+DISPOSE_LINGER = 0.2          # seconds between disposing the heartbeat and leaving (N3)
+# N14: what an app may obey. Start, stop, kill and variant switches belong to
+# the node agent; only a sim twin (no agent) opts in to stop and kill.
+OBEYABLE = frozenset({T.Command.CMD_SET_PARAM, T.Command.CMD_STOP_APP, T.Command.CMD_KILL_APP})
+DEFAULT_OBEYS = frozenset({T.Command.CMD_SET_PARAM})
+# Why a command naming this app is ignored (one log line each, N14).
+_NOT_MINE = {
+    T.Command.CMD_START_APP: "starting apps is the node agent's job",
+    T.Command.CMD_STOP_APP: "stopping apps is the node agent's job",
+    T.Command.CMD_KILL_APP: "killing apps is the node agent's job",
+    T.Command.CMD_SET_PARAM: "this app takes no parameter changes",
+}
 
 
 def log(who: str, level: str, msg: str) -> None:
-    """One line, same format on every node, so logs from several machines line up."""
+    """One line, same format on every node, so logs from several machines line up.
+    Never raises: if the launcher has died, its end of our output pipe is gone and
+    printing fails; the app must still be able to stop cleanly (N6), so the line
+    is dropped instead."""
     t = time.time()
     stamp = time.strftime("%H:%M:%S", time.localtime(t)) + f".{int(t * 1000) % 1000:03d}"
-    print(f"{stamp} {who} {level:<5} {msg}", flush=True)
+    try:
+        print(f"{stamp} {who} {level:<5} {msg}", flush=True)
+    except (OSError, ValueError):
+        pass
 
 
 def scenario_domain(scenario: str) -> int | None:
@@ -112,10 +133,14 @@ class App:
     def __init__(self, name: str, description: str = "", argv: list[str] | None = None,
                  heartbeat: bool = True,
                  participant_qos: Callable[[dds.DomainParticipantQos], None] | None = None,
-                 obeys: frozenset | set = ALL_COMMANDS):
+                 obeys: frozenset | set = DEFAULT_OBEYS):
+        obeys = frozenset(obeys)
+        if not obeys <= OBEYABLE:                  # checked first: a programming error, before any DDS
+            bad = ", ".join(sorted(c.name for c in obeys - OBEYABLE))
+            raise ValueError(f"{name}: an app can't obey {bad} (the node agent does that; N14)")
         self.name = name
         self.heartbeat = heartbeat
-        self.obeys = frozenset(obeys)
+        self.obeys = obeys
         self._argv = list(sys.argv[1:] if argv is None else argv)
         self._parser = argparse.ArgumentParser(prog=name, description=description, add_help=False)
         self._parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
@@ -141,7 +166,6 @@ class App:
         self._on_data: list[tuple] = []
         self._timers: list[Timer] = []
         self._running = True
-        self._exit_code = 0
         self._seen_cmds: set[int] = set()
         self._seq = 0
         self._cpu_last = (time.monotonic(), time.process_time())
@@ -184,6 +208,9 @@ class App:
         self.on_data(self._control_r, self._on_control, internal=True)
         if heartbeat:
             self.every(HEARTBEAT_PERIOD, self._heartbeat)
+        self._launcher_pid = self._launcher_from_env()
+        if self._launcher_pid:
+            self.every(LAUNCHER_CHECK_PERIOD, self._check_launcher)
 
         # SIGBREAK: Ctrl-Break on Windows, how a launcher politely stops an app there.
         for sig in (signal.SIGINT, signal.SIGTERM, getattr(signal, "SIGBREAK", None)):
@@ -300,25 +327,53 @@ class App:
             stamp_ns=time.time_ns()))
 
     def _on_control(self, c: T.DemoControl) -> None:
-        if c.target_node not in ("*", self.node) or c.target_app != self.name:
-            return                                  # node-level commands belong to node_agent
+        """N14. Commands for other apps (or for "*" apps) are ignored silently:
+        every app receives every command on the domain. A command naming this
+        app that isn't its to obey gets one log line saying why."""
+        if c.target_app != self.name or c.target_node not in ("*", self.node):
+            return
         if c.cmd_id in self._seen_cmds:
             return
         self._seen_cmds.add(c.cmd_id)
         cmd = c.command
-        if cmd not in self.obeys:
-            log(self.who, "INFO", f"ignoring {cmd.name}: this app obeys only "
-                                  f"{', '.join(sorted(k.name for k in self.obeys)) or 'nothing'}")
-            return
-        if cmd == T.Command.CMD_STOP_APP:
-            self.stop("stop command")
-        elif cmd == T.Command.CMD_KILL_APP:
-            log(self.who, "WARN", "kill command: exiting abruptly")
-            os._exit(EXIT_KILLED)
-        elif cmd == T.Command.CMD_SET_QOS_VARIANT:
-            self._restart_with_variant(c.arg)
-        elif cmd == T.Command.CMD_SET_PARAM:
+        exact = c.target_node == self.node             # opt-in stop/kill: never via "*" (N4)
+        if cmd == T.Command.CMD_SET_PARAM and cmd in self.obeys:
             self._set_param(c.arg, c.value)
+        elif cmd in self.obeys and exact:
+            if cmd == T.Command.CMD_STOP_APP:
+                self.stop("stop command")
+            elif cmd == T.Command.CMD_KILL_APP:
+                log(self.who, "WARN", "kill command: exiting abruptly")
+                os._exit(EXIT_KILLED)
+        elif cmd in self.obeys:
+            log(self.who, "INFO", f"ignoring {cmd.name}: obeyed only when node '{self.node}' "
+                                  f"is named exactly, never '*'")
+        elif cmd == T.Command.CMD_SET_QOS_VARIANT:
+            how = f"restart with --qos-variant {c.arg!r}" if c.arg else "restart without --qos-variant"
+            log(self.who, "INFO", f"ignoring {cmd.name}: QoS variant switches are the node agent's "
+                                  f"job (without an agent: {how})")
+        else:
+            log(self.who, "INFO", f"ignoring {cmd.name}: {_NOT_MINE.get(cmd, 'not an app command')}")
+
+    def _launcher_from_env(self) -> int | None:
+        raw = os.environ.get(LAUNCHER_ENV, "").strip()
+        if not raw:
+            return None                                 # started by hand: nothing to watch
+        try:
+            pid = int(raw)
+        except ValueError:
+            pid = 0
+        if pid <= 0:
+            log(self.who, "WARN", f"ignoring {LAUNCHER_ENV}={raw!r}: not a process ID")
+            return None
+        return pid
+
+    def _check_launcher(self) -> None:
+        """N6: the launcher is gone, so nobody supervises this app any more:
+        stop cleanly instead of running on as an orphan."""
+        if not process_alive(self._launcher_pid):
+            log(self.who, "WARN", f"launcher (process {self._launcher_pid}) is gone: stopping")
+            self.stop("launcher gone")
 
     def _set_param(self, name: str, value: float) -> None:
         if name not in self.params:
@@ -340,41 +395,6 @@ class App:
                 fn(new)
             except Exception:
                 log(self.who, "ERROR", f"in on_param({name}):\n{traceback.format_exc()}")
-
-    def _restart_with_variant(self, variant: str) -> None:
-        """S1-S7 (fw/supervise.py). Every check happens BEFORE anything is closed,
-        so a switch that can't happen leaves the app running as it was."""
-        if variant == self.qos_variant:                                       # S1: nothing to do
-            log(self.who, "INFO", f"already using QoS variant '{variant or 'default'}'")
-            return
-        known = list(self.provider.qos_profiles(VARIANT_LIBRARY))
-        if variant and variant not in known:                                  # S1: unknown
-            log(self.who, "WARN", f"unknown QoS variant '{variant}' (known: {', '.join(known) or 'none'})")
-            return
-        note = os.environ.get(RESTART_ENV)
-        if not note:                                                          # S3: no launcher
-            log(self.who, "WARN", "can't switch QoS variant: not started by a protorig launcher; "
-                                  f"restart it with --qos-variant {variant or '(none)'}")
-            return
-        profile = f"{VARIANT_LIBRARY}::{variant}" if variant else DEFAULT_PROFILE
-        try:                                                                  # S6a: QoS resolves for our topics
-            self.provider.default_profile = profile
-            for topic in self._topics:
-                self.provider.get_topic_datawriter_qos(topic)
-                self.provider.get_topic_datareader_qos(topic)
-        except dds.Error as e:
-            log(self.who, "ERROR", f"QoS variant switch failed: '{variant}' doesn't apply: {e}")
-            return
-        finally:
-            self.provider.default_profile = self.profile
-        try:                                                                  # S6a: note written
-            write_note(note, variant)                                         # S8: all or nothing
-        except OSError as e:
-            log(self.who, "ERROR", f"QoS variant switch failed: can't write the restart note: {e}")
-            return
-        log(self.who, "INFO", f"switching QoS variant to '{variant or 'default'}': asking the launcher to restart")
-        self._exit_code = EXIT_RESTART                                        # S1: run() closes DDS, returns 75
-        self.stop("QoS variant switch")
 
     # ------------------------------------------------------------------ run / stop
 
@@ -413,9 +433,27 @@ class App:
                         t.fn()
                     except Exception:
                         log(self.who, "ERROR", f"in every():\n{traceback.format_exc()}")
+        self._dispose_heartbeat()
         self._close()
         log(self.who, "INFO", "stopped")
-        return self._exit_code
+        return 0
+
+    def _dispose_heartbeat(self) -> None:
+        """N3: a clean stop disposes this app's heartbeat instance, so readers see
+        "stopped on purpose" (disposed), not "lost" (no writers). A kill or a
+        crash never gets here, which is exactly how readers tell them apart."""
+        if self._status_w is None:
+            return
+        try:
+            h = self._status_w.lookup_instance(T.NodeStatus(node=self.node[:32], app=self.name[:32]))
+            if h != dds.InstanceHandle.nil():
+                self._status_w.dispose_instance(h)
+                # The heartbeat is best effort: the dispose is sent once. Closing the
+                # participant at once can let readers process "participant gone"
+                # first and record "lost". A short pause lets the dispose land first.
+                time.sleep(DISPOSE_LINGER)
+        except dds.Error as e:
+            log(self.who, "WARN", f"couldn't dispose the heartbeat: {e}")
 
     def _close(self) -> None:
         """Release everything in the order Connext requires: conditions, then entities."""

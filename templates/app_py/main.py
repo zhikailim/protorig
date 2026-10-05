@@ -15,8 +15,11 @@ from fw import types as T  # noqa: F401  (the IDL types: T.Alert, T.Temperature,
 
 # 1. Standard start-up. fw.App handles: arguments, domain, QoS from qos/ (no QoS
 #    code here), participant named "<node>/{{name}}", 1 Hz heartbeat on
-#    _sys/NodeStatus, Control Panel commands (stop / kill / QoS variant /
-#    parameters), incompatible-QoS warnings, clean shutdown on Ctrl-C.
+#    _sys/NodeStatus, live parameter changes from the Control Panel,
+#    incompatible-QoS warnings, clean shutdown on Ctrl-C. Starting, stopping
+#    and QoS-variant switches are done by the node agent, not here.
+#    (A sim twin of an external node has no agent: it opts in to stop and kill
+#    with App(..., obeys={T.Command.CMD_STOP_APP, T.Command.CMD_KILL_APP}).)
 app = App("{{name}}", "{{description}}")
 
 # 2. App-specific arguments (they appear in --help; the Control Panel can change them live).
@@ -37,5 +40,5 @@ app = App("{{name}}", "{{description}}")
 # 5. Periodic work.
 # app.every(0.1, lambda: ...)
 
-# 6. Run until Ctrl-C or a stop/kill command, then clean up.
+# 6. Run until Ctrl-C (or its node agent stops it), then clean up.
 sys.exit(app.run())

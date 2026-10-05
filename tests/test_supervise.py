@@ -1,10 +1,12 @@
 """
-test_supervise.py — the launcher's restart rules (libs/py/fw/supervise.py, S1-S7).
+test_supervise.py — libs/py/fw/supervise.py: building variant arguments,
+telling whether a process is alive, and running one app process.
 
-Pure logic, no processes or DDS: every launcher (test harness, protorig run,
-node_agent) makes the same decision for the same exit.
+No DDS here: these run without Connext.
 """
+import os
 import random
+import subprocess
 import sys
 from pathlib import Path
 
@@ -12,14 +14,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "libs" / "py"))
 
-from fw.supervise import (EXIT_KILLED, EXIT_RESTART, STARTUP_GRACE,  # noqa: E402
-                          after_exit, read_note, with_variant)
+from fw.supervise import LAUNCHER_ENV, Supervised, process_alive, with_variant  # noqa: E402
 
 BASE = ["--node", "pi", "--domain", "0"]
 V = "Variant.Temperature.LongHistory"
 
 
-# --- with_variant ---------------------------------------------------------------------
+# --- with_variant (used by the agent for N13 V3) --------------------------------------
 
 @pytest.mark.parametrize("args,variant,expected", [
     (BASE, V, BASE + ["--qos-variant", V]),
@@ -47,117 +48,84 @@ def test_with_variant_fuzz():
             assert out[-2:] == ["--qos-variant", variant]
 
 
-# --- the note -------------------------------------------------------------------------
+# --- process_alive (the launcher watch, N6) --------------------------------------------
 
-def test_note_is_read_then_deleted(tmp_path):
-    n = tmp_path / "restart.note"
-    n.write_text(V + "\n")
-    assert read_note(n) == V and not n.exists()
+def test_process_alive_for_this_process():
+    assert process_alive(os.getpid())
 
 
-@pytest.mark.parametrize("content,expected", [("\n", ""), ("", ""), (f"  {V}  \nextra\n", V)])
-def test_note_contents(tmp_path, content, expected):
-    n = tmp_path / "restart.note"
-    n.write_text(content)
-    assert read_note(n) == expected
+def test_process_not_alive_once_ended_and_collected():
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()                                        # collected: no zombie left behind
+    assert not process_alive(p.pid)
 
 
-def test_missing_or_garbage_note(tmp_path):
-    assert read_note(tmp_path / "nope") is None
-    bad = tmp_path / "bad.note"
-    bad.write_bytes(b"\xff\xfe\x00garbage")
-    assert read_note(bad) is None
+@pytest.mark.parametrize("pid", [0, -1, -12345, 2**32 - 1, 2**32, 2**62, "123", None, 1.5, True])
+def test_process_alive_rejects_nonsense(pid):
+    assert process_alive(pid) is False
 
 
-# --- after_exit -----------------------------------------------------------------------
+# --- Supervised ----------------------------------------------------------------------
 
-def test_restart_request_switches(tmp_path):                                  # S1, S4
-    n = tmp_path / "restart.note"
-    n.write_text(V)
-    d = after_exit(EXIT_RESTART, 30, BASE, "normal", None, n)
-    assert d.restart and d.args == BASE + ["--qos-variant", V] and d.phase == "switched"
+def _py(code: str) -> list[str]:
+    return [sys.executable, "-c", code]
 
 
-def test_restart_request_without_note_keeps_arguments(tmp_path):              # S6d
-    d = after_exit(EXIT_RESTART, 30, BASE, "normal", None, tmp_path / "missing")
-    assert d.restart and d.args == BASE and d.phase == "normal" and "missing" in d.message
+def wait_for(cond, timeout, what):
+    import time
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if cond():
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"timed out waiting for {what}")
 
 
-def test_failed_start_after_switch_rolls_back(tmp_path):                     # S6b
-    new = BASE + ["--qos-variant", V]
-    d = after_exit(1, 0.5, new, "switched", BASE, tmp_path / "n")
-    assert d.restart and d.args == BASE and d.phase == "rollback"
+def test_tells_the_app_its_launcher():
+    s = Supervised(_py(f"import os; print(os.environ.get('{LAUNCHER_ENV}', 'none'))"), [], dict(os.environ))
+    assert s.wait_exit(10) == 0
+    assert s.lines == [str(os.getpid())]
 
 
-def test_failed_rollback_gives_up(tmp_path):                                  # S6c
-    d = after_exit(1, 0.5, BASE, "rollback", BASE, tmp_path / "n")
-    assert not d.restart and "giving up" in d.message
+def test_by_hand_adds_no_launcher():
+    env = {k: v for k, v in os.environ.items() if k != LAUNCHER_ENV}
+    s = Supervised(_py(f"import os; print(os.environ.get('{LAUNCHER_ENV}', 'none'))"), [], env,
+                   watch_launcher=False)
+    assert s.wait_exit(10) == 0
+    assert s.lines == ["none"]
 
 
-@pytest.mark.parametrize("code,uptime,phase", [
-    (0, 0.5, "switched"),                 # stopped on purpose right after a switch
-    (EXIT_KILLED, 0.5, "switched"),       # killed on purpose
-    (1, STARTUP_GRACE + 1, "switched"),   # ran fine for a while, then crashed: not a failed start
-    (1, 0.5, "normal"),                   # crashed with no switch involved: not ours to handle
-    (0, 100, "normal"),
-])
-def test_other_exits_end_the_app(tmp_path, code, uptime, phase):
-    d = after_exit(code, uptime, BASE, phase, BASE, tmp_path / "n")
-    assert not d.restart
+def test_own_id_replaces_an_inherited_one():
+    env = dict(os.environ, **{LAUNCHER_ENV: "999"})      # e.g. inherited from an outer launcher
+    s = Supervised(_py(f"import os; print(os.environ.get('{LAUNCHER_ENV}'))"), [], env)
+    assert s.wait_exit(10) == 0
+    assert s.lines == [str(os.getpid())]
 
 
-def test_after_exit_fuzz(tmp_path):
-    """Random exits in random states: never crashes, never restarts forever
-    (a rollback that fails is always the end), args always a list when restarting."""
-    rnd = random.Random(5)
-    for _ in range(3000):
-        n = tmp_path / "n"
-        if rnd.random() < 0.5:
-            n.write_text(rnd.choice(["", V, "\n\n", "x" * 200]))
-        elif n.exists():
-            n.unlink()
-        d = after_exit(rnd.choice([0, 1, 2, 3, EXIT_RESTART, EXIT_KILLED, -9, 255]),
-                       rnd.uniform(0, 10), list(BASE), rnd.choice(["normal", "switched", "rollback"]),
-                       rnd.choice([None, list(BASE)]), n)
-        if d.restart:
-            assert isinstance(d.args, list)
-        if d.phase == "rollback":
-            assert d.restart
+def test_output_and_exit_code():
+    s = Supervised(_py("import sys; print('a'); print('b'); sys.exit(3)"), [], dict(os.environ))
+    assert s.wait_exit(10) == 3 and s.lines == ["a", "b"] and s.exited()
 
 
-# --- S8: the note is written all or nothing; S9: nothing left behind -----------
-
-from fw.supervise import new_note_path, write_note  # noqa: E402
-
-
-def test_note_written_whole_and_no_temp_left(tmp_path):
-    n = tmp_path / "restart.note"
-    n.write_text("half-writ")                                   # garbage from before
-    write_note(n, V)
-    assert read_note(n) == V
-    assert not list(tmp_path.glob("*.tmp")), "the temporary file must be renamed into place"
-
-
-def test_note_never_half_written(tmp_path, monkeypatch):
-    """If the final step fails (e.g. killed mid-write), the note is absent, never
-    partial: the launcher then restarts unchanged (S6d) instead of reading garbage."""
-    import os
-    n = tmp_path / "restart.note"
-    def boom(*a, **k):
-        raise OSError("killed here")
-    monkeypatch.setattr(os, "replace", boom)
-    with pytest.raises(OSError):
-        write_note(n, V)
-    assert not n.exists()
+def test_interrupt_is_polite():
+    code = ("import signal, sys, time\n"
+            "signal.signal(signal.SIGINT, lambda *a: sys.exit(0))\n"
+            "if hasattr(signal, 'SIGBREAK'): signal.signal(signal.SIGBREAK, lambda *a: sys.exit(0))\n"
+            "print('ready', flush=True)\n"
+            "time.sleep(30)\n")
+    s = Supervised(_py(code), [], dict(os.environ))
+    wait_for(lambda: "ready" in s.lines, 10, "the child to start")
+    s.interrupt()
+    assert s.wait_exit(5) == 0
 
 
-def test_unwritable_note_raises(tmp_path):
-    with pytest.raises(OSError):
-        write_note(tmp_path / "no" / "such" / "restart.note", V)
-
-
-def test_note_paths_are_unique():
-    paths = {new_note_path("same_app") for _ in range(50)}
-    assert len(paths) == 50 and all(p.parent.is_dir() for p in paths)
-    for p in paths:
-        p.parent.rmdir()
+def test_terminate_forces_a_process_that_ignores_ctrl_c():
+    code = ("import signal, time\n"
+            "signal.signal(signal.SIGINT, signal.SIG_IGN)\n"
+            "if hasattr(signal, 'SIGBREAK'): signal.signal(signal.SIGBREAK, signal.SIG_IGN)\n"
+            "print('ready', flush=True)\n"
+            "time.sleep(30)\n")
+    s = Supervised(_py(code), [], dict(os.environ))
+    wait_for(lambda: "ready" in s.lines, 10, "the child to start")
+    s.terminate(grace=0.5)
+    assert s.exited() and s.returncode != 0

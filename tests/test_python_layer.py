@@ -22,10 +22,13 @@ sys.path.insert(0, str(REPO / "libs" / "py"))
 sys.path.insert(0, str(REPO / "cli"))
 
 PROBE = '''
+import os
 import sys
 from fw.app import App
 from fw import types as T
-app = App("probe", "test probe")
+# PROBE_OBEYS="CMD_STOP_APP,CMD_KILL_APP": opt in, like a sim twin (N14)
+obeys = {T.Command[c] for c in os.environ["PROBE_OBEYS"].split(",")} if os.environ.get("PROBE_OBEYS") else None
+app = App("probe", "test probe", **({"obeys": obeys} if obeys is not None else {}))
 rate = app.arg("--rate", 5.0, "Hz")
 seen = []
 app.on_param("rate", lambda v: print(f"PARAM rate={v}", flush=True))
@@ -36,17 +39,6 @@ def on_temp(s):
         raise RuntimeError("below zero, on purpose")
     alerts.write(T.Alert(source=app.who, alert_id="ECHO", message="echo", value=s.temperature))
 app.on_data(inp, on_temp)
-# Failure switches for the restart tests (S6b, S6c):
-import os
-from pathlib import Path
-if os.environ.get("PROBE_CRASH_ON") and os.environ["PROBE_CRASH_ON"] == app.qos_variant:
-    sys.exit(3)                                   # this variant "fails to start"
-count_file = os.environ.get("PROBE_COUNT_FILE")
-if count_file:
-    n = int(Path(count_file).read_text()) if Path(count_file).exists() else 0
-    Path(count_file).write_text(str(n + 1))
-    if n >= 1:
-        sys.exit(4)                               # every start after the first fails
 sys.exit(app.run())
 '''
 
@@ -93,27 +85,200 @@ def test_callback_exception_does_not_kill_the_app(bus, start_app, probe_dir):
     assert "below zero, on purpose" in app.output
 
 
-def test_commands_for_others_are_ignored(bus, start_app, probe_dir):
-    import time
+def _send(bus, app, node, target, command, arg="", value=0.0):
+    from fw import types as T
+    bus._cmd_id += 1
+    bus.send("_sys/DemoControl", T.DemoControl(target_node=node, target_app=target, cmd_id=bus._cmd_id,
+                                               command=command, arg=arg, value=value), to=app)
+
+
+def test_commands_for_others_are_ignored_silently(bus, start_app, probe_dir):
+    """Every app receives every command: those for other apps, other nodes or
+    "*" apps are dropped without a word (N14), not even a log line."""
     from fw import types as T
     app = _start(start_app, probe_dir, node="hpc-vm")
-    bus.command(app, T.Command.CMD_KILL_APP, target_node="hpc-pi")       # other node
-    bus._cmd_id += 1
-    bus.send("_sys/DemoControl", T.DemoControl(target_node="hpc-vm", target_app="other_app",
-                                               cmd_id=bus._cmd_id, command=T.Command.CMD_KILL_APP), to=app)
-    bus._cmd_id += 1
-    bus.send("_sys/DemoControl", T.DemoControl(target_node="hpc-vm", target_app="",   # node-level: node_agent's job
-                                               cmd_id=bus._cmd_id, command=T.Command.CMD_KILL_APP), to=app)
+    p = T.Command.CMD_SET_PARAM
+    _send(bus, app, "hpc-pi", "probe", p, "rate", 1.0)          # other node
+    _send(bus, app, "hpc-vm", "other_app", p, "rate", 2.0)      # other app
+    _send(bus, app, "hpc-vm", "*", p, "rate", 3.0)              # "*" apps: parameter names differ per app
+    _send(bus, app, "hpc-vm", "", T.Command.CMD_KILL_APP)      # empty
+    _send(bus, app, "*", "*", T.Command.CMD_KILL_APP)
     time.sleep(1.0)
     assert not app.exited()
+    assert "PARAM rate=" not in app.output and "ignoring" not in app.output, app.output
 
 
 def test_wildcard_node_reaches_the_app(bus, start_app, probe_dir):
     from fw import types as T
-    from fw.app import EXIT_KILLED
+    from fw.testing import wait_for
     app = _start(start_app, probe_dir)
+    bus.command(app, T.Command.CMD_SET_PARAM, arg="rate", value=7.0, target_node="*")
+    wait_for(lambda: "PARAM rate=7.0" in app.output, 3, "the parameter change via node '*'")
+
+
+@pytest.mark.parametrize("command", ["CMD_STOP_APP", "CMD_KILL_APP", "CMD_START_APP", "CMD_SET_QOS_VARIANT"])
+def test_lifecycle_commands_are_the_agents_job(bus, start_app, probe_dir, command):
+    """N14: by default an app obeys only SET_PARAM. A start, stop, kill or variant
+    switch sent to the app itself is ignored with one line saying who does it."""
+    from fw import types as T
+    from fw.testing import wait_for
+    beats = bus.listen("_sys/NodeStatus")
+    app = _start(start_app, probe_dir)
+    bus.command(app, T.Command[command], arg="Variant.Temperature.LongHistory")
+    wait_for(lambda: f"ignoring {command}:" in app.output, 3, "the 'ignoring' line")
+    line = next(l for l in app.lines if f"ignoring {command}:" in l)
+    assert "agent" in line, line
+    mark = len(beats.all())
+    wait_for(lambda: any(b.app == "probe" for b in beats.all()[mark:]), 3, "heartbeats to continue")
+    assert not app.exited()
+    assert all(b.qos_variant == "" for b in beats.all() if b.app == "probe")       # no switch happened
+
+
+def test_opt_in_stop_and_kill_only_when_named_exactly(bus, start_app, probe_dir):
+    """A sim twin's opt-in (N14): stop and kill are obeyed only when its node is
+    named exactly, never via "*" (N4: a "stop all" leaves the twin running)."""
+    from fw import types as T
+    from fw.app import EXIT_KILLED
+    from fw.testing import wait_for
+    env = {"PROBE_OBEYS": "CMD_STOP_APP,CMD_KILL_APP"}
+    app = _start(start_app, probe_dir, env=env)
+    bus.command(app, T.Command.CMD_STOP_APP, target_node="*")
     bus.command(app, T.Command.CMD_KILL_APP, target_node="*")
-    assert app.wait_exit(5) == EXIT_KILLED
+    wait_for(lambda: app.output.count("never '*'") >= 2, 3, "both refusals")
+    assert not app.exited()
+    bus.command(app, T.Command.CMD_STOP_APP)                              # named exactly
+    assert app.wait_exit(5) == 0
+    app2 = _start(start_app, probe_dir, env=env)
+    bus.command(app2, T.Command.CMD_KILL_APP)
+    assert app2.wait_exit(5) == EXIT_KILLED
+
+
+def test_obeys_refuses_commands_an_app_cannot_do():
+    pytest.importorskip("rti.connextdds")
+    from fw import types as T
+    from fw.app import App
+    for cmd in (T.Command.CMD_START_APP, T.Command.CMD_SET_QOS_VARIANT):
+        with pytest.raises(ValueError, match="node agent"):
+            App("x", obeys={cmd, T.Command.CMD_SET_PARAM}, argv=[])
+
+
+# --- N3: a clean stop disposes the heartbeat; a kill doesn't -----------------------
+
+def _heartbeat_states(bus, node):
+    """A reader of the probe's heartbeat that records every instance state it sees."""
+    import threading
+    import rti.connextdds as dds
+    r = dds.DataReader(bus._sub, bus._topic("_sys/NodeStatus"),
+                       bus.provider.get_topic_datareader_qos("_sys/NodeStatus"))
+    seen, stop = [], threading.Event()
+    def loop():
+        while not stop.is_set():
+            try:
+                for data, info in r.take():
+                    if info.valid and (data.node, data.app) == (node, "probe"):
+                        seen.append(("alive", info.instance_handle))
+                    elif not info.valid and any(h == info.instance_handle for _, h in seen):
+                        seen.append((str(info.state.instance_state), info.instance_handle))
+            except dds.Error:
+                pass
+            time.sleep(0.05)
+    t = threading.Thread(target=loop, daemon=True)
+    t.start()
+    def close():
+        stop.set()
+        t.join(2)
+        r.close()
+    return seen, close
+
+
+def test_clean_stop_disposes_heartbeat(bus, start_app, probe_dir):
+    from fw.testing import wait_for
+    seen, close = _heartbeat_states(bus, "n3-clean")
+    try:
+        app = _start(start_app, probe_dir, node="n3-clean")
+        wait_for(lambda: any(k == "alive" for k, _ in seen), 5, "a heartbeat")
+        app.interrupt()
+        assert app.wait_exit(5) == 0
+        wait_for(lambda: any("DISPOSED" in k for k, _ in seen), 5, "the heartbeat to be disposed")
+    finally:
+        close()
+
+
+def test_kill_does_not_dispose_heartbeat(bus, start_app, probe_dir):
+    """A kill looks like a crash on the network: the heartbeat goes "no writers"
+    (lost), never "disposed". That difference is how displays tell them apart."""
+    from fw import types as T
+    from fw.testing import wait_for
+    seen, close = _heartbeat_states(bus, "n3-kill")
+    try:
+        app = _start(start_app, probe_dir, node="n3-kill", env={"PROBE_OBEYS": "CMD_KILL_APP"})
+        wait_for(lambda: any(k == "alive" for k, _ in seen), 5, "a heartbeat")
+        bus.command(app, T.Command.CMD_KILL_APP)
+        app.wait_exit(5)
+        wait_for(lambda: any("NO_WRITERS" in k for k, _ in seen), 15, "the heartbeat to be lost")
+        assert not any("DISPOSED" in k for k, _ in seen), seen
+    finally:
+        close()
+
+
+# --- N6: the app stops by itself when its launcher dies ---------------------------
+
+LAUNCHER = '''
+import os, sys, time
+sys.path.insert(0, {libs!r})
+from fw.supervise import Supervised
+s = Supervised([sys.executable, {probe!r}], ["--node", "n6-node", "--domain", "{domain}"], dict(os.environ))
+print("CHILD", s.proc.pid, flush=True)
+time.sleep(120)
+'''
+
+
+def test_app_stops_when_its_launcher_dies(bus, probe_dir):
+    """Kill the launcher outright (no chance to clean up): the app notices within
+    about a second and stops cleanly, so its heartbeat is DISPOSED, not lost."""
+    import os
+    import signal
+    from fw.supervise import process_alive
+    from fw.testing import wait_for
+    seen, close = _heartbeat_states(bus, "n6-node")
+    env = dict(os.environ, PYTHONPATH=str(REPO / "libs" / "py"), PYTHONUNBUFFERED="1")
+    code = LAUNCHER.format(libs=str(REPO / "libs" / "py"), probe=str(probe_dir / "main.py"), domain=bus.domain)
+    launcher = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True, env=env)
+    child = None
+    try:
+        child = int(launcher.stdout.readline().split()[1])
+        wait_for(lambda: any(k == "alive" for k, _ in seen), 10, "the app's heartbeat")
+        launcher.kill()                                  # SIGKILL / TerminateProcess
+        launcher.wait()
+        wait_for(lambda: any("DISPOSED" in k for k, _ in seen), 6, "a clean stop of the orphaned app")
+    finally:
+        close()
+        if launcher.poll() is None:
+            launcher.kill()
+        if child and process_alive(child):
+            try:
+                os.kill(child, signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM)
+            except OSError:
+                pass
+
+
+def test_garbage_launcher_id_is_ignored(bus, start_app, probe_dir):
+    from fw.supervise import LAUNCHER_ENV
+    from fw.testing import wait_for
+    app = _start(start_app, probe_dir, supervised=False, env={LAUNCHER_ENV: "not-a-pid"})
+    wait_for(lambda: "not a process ID" in app.output, 3, "the warning")
+    time.sleep(1.5)
+    assert not app.exited()
+
+
+def test_launcher_already_gone_at_start(bus, start_app, probe_dir):
+    """Started with the ID of a process that has ended: it stops at the first check."""
+    from fw.supervise import LAUNCHER_ENV
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()
+    app = _start(start_app, probe_dir, supervised=False, env={LAUNCHER_ENV: str(p.pid)})
+    assert app.wait_exit(5) == 0
+    assert f"launcher (process {p.pid}) is gone: stopping" in app.output
 
 
 def test_set_param(bus, start_app, probe_dir):
@@ -134,108 +299,6 @@ def test_set_param_rejects_non_finite(bus, start_app, probe_dir):
     bus.command(app, T.Command.CMD_SET_PARAM, arg="rate", value=float("nan"))
     wait_for(lambda: "rejected non-finite value" in app.output, 3, "NaN to be rejected")
     assert "PARAM rate=" not in app.output          # the callback never saw it
-
-
-LONG = "Variant.Temperature.LongHistory"
-
-
-def _beat_with(beats, variant, after=0):
-    """A probe heartbeat carrying `variant`, among heartbeats received after index `after`."""
-    return any(b.app == "probe" and b.qos_variant == variant for b in beats.all()[after:])
-
-
-def test_qos_variant_restart(bus, start_app, probe_dir):
-    """S1, S4, S5: a switch restarts the app through its launcher; the heartbeat
-    then reports the new variant; same variant again is ignored; "" = back to default."""
-    from fw import types as T
-    from fw.testing import wait_for
-    beats = bus.listen("_sys/NodeStatus")
-    app = _start(start_app, probe_dir)
-    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
-    wait_for(lambda: _beat_with(beats, LONG), 10, "a heartbeat carrying the new variant")
-    assert app.restarts == 1 and not app.exited()
-    assert f"[launcher] switching QoS variant to '{LONG}'" in app.output
-
-    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)                 # same again: no restart
-    wait_for(lambda: f"already using QoS variant '{LONG}'" in app.output, 3, "'already using'")
-    assert app.restarts == 1
-
-    mark = len(beats.all())
-    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg="")                   # back to default
-    wait_for(lambda: _beat_with(beats, "", mark), 10, "a heartbeat on the default QoS")
-    assert app.restarts == 2
-
-    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg="Variant.Does.Not.Exist")
-    wait_for(lambda: "unknown QoS variant" in app.output, 3, "a warning for an unknown variant")
-    assert app.restarts == 2
-
-
-def test_note_folder_removed_when_app_ends(bus, start_app, probe_dir):
-    """S9: each launch gets its own note folder, and nothing is left behind once
-    the app ends for good (after a variant restart too)."""
-    import os
-    from fw import types as T
-    from fw.supervise import RESTART_ENV
-    from fw.testing import wait_for
-    beats = bus.listen("_sys/NodeStatus")
-    app = _start(start_app, probe_dir)
-    folder = Path(app._env[RESTART_ENV]).parent
-    assert folder.is_dir()
-    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
-    wait_for(lambda: _beat_with(beats, LONG), 10, "the restart")
-    assert folder.is_dir() and not list(folder.iterdir()), "note read and deleted, folder kept while running"
-    app.terminate()
-    assert not folder.exists()
-
-
-def test_variant_switch_refused_without_launcher(bus, start_app, probe_dir):
-    """S3: started by hand (nobody to restart it): refuse the switch and stay up."""
-    from fw import types as T
-    from fw.testing import wait_for
-    beats = bus.listen("_sys/NodeStatus")
-    app = _start(start_app, probe_dir, supervised=False)
-    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
-    wait_for(lambda: "not started by a protorig launcher" in app.output, 3, "the refusal")
-    mark = len(beats.all())
-    wait_for(lambda: _beat_with(beats, "", mark), 3, "heartbeats still on the default QoS")
-    assert not app.exited() and not _beat_with(beats, LONG)
-
-
-def test_variant_switch_with_unwritable_note_stays_up(bus, start_app, probe_dir, tmp_path):
-    """S6a: the note can't be written: the app stays up on its current variant."""
-    from fw import types as T
-    from fw.supervise import RESTART_ENV
-    from fw.testing import wait_for
-    bad = str(tmp_path / "no" / "such" / "dir" / "restart.note")
-    app = _start(start_app, probe_dir, env={RESTART_ENV: bad})
-    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
-    wait_for(lambda: "can't write the restart note" in app.output, 3, "the failure to be logged")
-    time.sleep(0.5)
-    assert not app.exited() and app.restarts == 0
-
-
-def test_failed_switch_rolls_back(bus, start_app, probe_dir):
-    """S6b: the app fails to start on the new variant: the launcher restarts it on the old one."""
-    from fw import types as T
-    from fw.testing import wait_for
-    beats = bus.listen("_sys/NodeStatus")
-    app = _start(start_app, probe_dir, env={"PROBE_CRASH_ON": LONG})
-    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
-    wait_for(lambda: "[launcher] the new QoS variant failed to start (exit 3): rolling back" in app.output,
-             10, "the rollback")
-    mark = len(beats.all())
-    wait_for(lambda: _beat_with(beats, "", mark), 10, "heartbeats on the old (default) QoS again")
-    assert app.restarts == 2 and not app.exited()
-
-
-def test_failed_rollback_gives_up(bus, start_app, probe_dir, tmp_path):
-    """S6c: the rollback fails too: the launcher gives up instead of looping."""
-    from fw import types as T
-    app = _start(start_app, probe_dir, env={"PROBE_COUNT_FILE": str(tmp_path / "starts")})
-    bus.command(app, T.Command.CMD_SET_QOS_VARIANT, arg=LONG)
-    assert app.wait_exit(15) == 4
-    assert "[launcher] the rollback failed too (exit 4): giving up" in app.output
-    assert app.restarts == 2                         # the switch, then one rollback: no loop
 
 
 def test_incompatible_qos_is_reported(bus, start_app, probe_dir):
@@ -286,13 +349,11 @@ def test_fuzz_control_commands(bus, start_app, probe_dir):
     from fw.testing import wait_for
     app = _start(start_app, probe_dir)
     rnd = random.Random(7)
-    safe = [T.Command.CMD_SET_PARAM, T.Command.CMD_START_APP, T.Command.CMD_SET_QOS_VARIANT]
+    safe = list(T.Command)               # by default an app obeys only SET_PARAM, so even stop/kill are safe
     junk_text = ["", "rate", "x" * 64, "Variant.", "../../etc", "ñandú", "rate;rm -rf", " "]
     for i in range(200):
         cmd = rnd.choice(safe)
         arg = rnd.choice(junk_text)
-        if cmd == T.Command.CMD_SET_QOS_VARIANT and arg:
-            arg = "Variant.Bogus." + str(i)          # unknown variants: must warn, not restart
         value = rnd.choice([0.0, -1.0, 1e308, float("nan"), float("inf"), 3.3])
         bus._cmd_id += 1
         bus.send("_sys/DemoControl", T.DemoControl(target_node=rnd.choice(["*", app.node]), target_app="probe",

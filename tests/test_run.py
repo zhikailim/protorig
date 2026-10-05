@@ -230,9 +230,8 @@ def test_is_local_ip(ip, local):
 
 def test_sim_live(rig, bus):
     """The whole sample on this machine: data flows, nothing uses the network, a
-    crash is reported while the rest keep running, a variant switch restarts the
-    probe through run, and Ctrl-C stops everything."""
-    from fw import types as T
+    crash is reported while the rest keep running, and Ctrl-C stops everything.
+    (QoS-variant switches are the node agent's job, N13: not tested through run.)"""
     from fw.testing import wait_for
     temps = bus.listen("Example Temperature")
     beats = bus.listen("_sys/NodeStatus")
@@ -258,13 +257,6 @@ def test_sim_live(rig, bus):
         # U8: output prefixed per app; U6: arguments arrived intact.
         assert any(l.startswith("desk/probe") and "LABEL=two words" in l for l in run.lines), run.output
         assert run.output.count("[RTI LICENSE]") <= 1                                   # banner once
-
-        # U7: a QoS variant switch restarts the probe through run.
-        bus.command(type("A", (), {"name": "probe", "node": "desk"})(), T.Command.CMD_SET_QOS_VARIANT,
-                    arg="Variant.Temperature.LongHistory")
-        wait_for(lambda: any(b.app == "probe" and b.qos_variant == "Variant.Temperature.LongHistory"
-                             for b in beats.all()), 15, "a heartbeat on the new variant")
-        assert "[run] switching QoS variant" in run.output
 
         code = run.ctrl_c()                                                              # U9
         assert "stopping every app" in run.output

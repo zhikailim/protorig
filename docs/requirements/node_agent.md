@@ -5,7 +5,8 @@ Status: UNDER REVIEW (30 Sep 2026). Nothing here is built yet.
 - N4: REVISED and approved 30 Sep 2026 (the agent owns the process, the app
   owns its behaviour).
 - N9-N10: moved to run.md as U11-U12.
-- N11-N12: approved in outline, detail review pending.
+- N11: approved 5 Oct 2026.
+- N12: approved in outline, detail review pending.
 - N13 (variant switching, replaces the note protocol S1-S9): approved 30 Sep 2026.
 - N14 (what an app obeys): approved 30 Sep 2026.
 The bring-up flow these requirements produce is described in
@@ -156,10 +157,37 @@ Rule: the agent owns the process, the app owns its behaviour.
 `run <scenario> --live` is a mode of the run command, so its requirements now
 live with run's: U11 and U12 in [run.md](run.md).
 
-## N11. Never stop the sender  [outline approved]
+## N11. Never stop the sender  [approved 5 Oct 2026, not built]
 
-The agent never stops the app that sent the command (identified from the
-sample's writer: its participant name).
+Why: the Control Panel is itself started by Windows' agent; a "stop *" it
+sends must not stop it mid-demo.
+
+- How the sender is known: every sample carries its writer's handle; Connext
+  gives that writer's participant name, `<node>/<app>`. No IDL change (the
+  same lookup names senders in logs and alerts, N4 and N7).
+- A. A STOP or KILL (named, or via `*`) skips the sender when the sender is
+  `<this node>/<app>` and that app is in this node's list; the rest of the
+  command still happens; logged "not stopping <app>: it sent the command".
+  The same app name on another node is not protected. Unambiguous because
+  node and app names can't contain "/" (`check`).
+- B. A variant switch of the sender is refused (it would restart it). START
+  and SET_PARAM are unaffected.
+- C. Unknown sender (no name, not `node/app`, or already gone): acted on
+  normally, logged as sender "unknown". Safe because every agent-managed app
+  is named `node/app` (addition 1), so an unknown sender is never one of them.
+- D. `run --live` (participant `<node>/run-live`) is never protected: "-" is
+  not allowed in app names, so its "stop *" stops everything.
+- Addition 1: every app, in every language (fw.App, C++ fw::App), names its
+  participant `<node>/<app>`; a test checks it.
+- Addition 2: the agent looks up the sender as soon as it takes the sample,
+  before the command is queued (N4), so a sender that exits right after
+  sending is still recognised.
+- Accepted: a second copy of an app started by hand shares the name, so a
+  "stop *" it sends also spares the agent's copy. Visible and logged, rare,
+  harmless; not worth comparing process IDs.
+- Not authentication: a participant's name is self-declared (N5).
+- For the Control Panel review: `*` means every app, GUIs included; "reset
+  the demo, keep the screens up" = one named command per demo app.
 
 ## N12. _sys/AppState  [outline approved; detail review pending]
 

@@ -5,10 +5,9 @@ Status (30 Sep 2026):
 - B1-B7: added while building; approved 30 Sep 2026.
 - U2 (changed): approved 30 Sep 2026 as part of node_agent (N2); not built yet.
 - U11 (--live): moved here from node_agent (N9); approved 30 Sep 2026, not built.
-- U12 (where --live runs): moved here from node_agent (N10); simpler rule
-  proposed 30 Sep 2026, awaiting approval.
-- U7 (restart rules): will change if node_agent N13/N14 are approved; `run`
-  then does no variant switching (only agents do).
+- U12 (where --live runs): moved here from node_agent (N10); approved 5 Oct 2026, not built.
+- U7 (restart rules): changed by node_agent N13/N14 (approved): `run`
+  does no variant switching (only agents do); the note protocol is removed.
 
 What it is for: one command starts a scenario, or a single app. On a desk it
 runs the whole scenario on one machine; on the rig, each machine runs its own
@@ -132,7 +131,7 @@ U11. [approved 30 Sep 2026, not built]
        failed; 2 = could not start (agents missing, scenario mismatch,
        wrong machine).
 
-U12. [proposed 30 Sep 2026, awaiting approval]
+U12. [approved 5 Oct 2026, not built]
      `--live` runs from a machine that is in the scenario, found by its IP:
      - one node has this machine's IP: use that node;
      - several nodes share this IP: use the first and say so;

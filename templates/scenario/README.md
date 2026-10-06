@@ -3,6 +3,7 @@
 {{description}}
 
 Write this README first: it is the spec the apps and tests are built from.
+Keep this the simplest scenario that proves the value: every app, topic and beat must earn its place.
 
 ## 1. Value proven
 

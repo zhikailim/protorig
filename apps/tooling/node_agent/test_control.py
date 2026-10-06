@@ -74,7 +74,7 @@ def test_B1_startup_rows_and_stale_alerts_cleared():
     assert r.state("mon") == C.NOT_RUNNING and r.state("cpp") == C.UNAVAILABLE
     assert "not built" in r.c.apps["cpp"].detail
     cleared = {a.alert_id for a in r.kinds(r.log, C.ClearAlert)}
-    assert {"crash:mon", "hang:mon", "variant:mon", "start:mon"} <= cleared
+    assert {"crash:mon", "hang:mon", "var:mon", "start:mon"} <= cleared
     assert not r.kinds(r.log, C.Spawn)                                   # starts nothing by itself
 
 
@@ -313,7 +313,7 @@ def test_B19_failed_switch_rolls_back_once(how):
         assert r.kinds(acts, C.Kill)
         acts = r.exit("mon", -9)
     alert = r.kinds(acts, C.RaiseAlert)[0]
-    assert alert.alert_id == "variant:mon" and "rolled back" in alert.message
+    assert alert.alert_id == "var:mon" and "rolled back" in alert.message
     assert "--qos-variant" not in r.alive["mon"]                          # back on the default
     r.beat("mon", "")
     a = r.c.apps["mon"]
@@ -380,6 +380,15 @@ def test_B21_crash_line_trimmed_in_row_and_alert():
     acts = r.exit("mon", 1, "Error: " + "ü" * 300)
     assert len(r.c.apps["mon"].detail.encode()) <= 128
     assert all(len(a.message.encode()) <= 128 for a in r.kinds(acts, C.RaiseAlert))
+
+
+def test_every_alert_id_fits_its_field_for_the_longest_app_name():
+    """Alert.alert_id is string<32> and an over-long id makes the write fail (the
+    alert is never published). With `check`'s limit of 26 characters (N7):"""
+    longest = "a" * 26
+    for kind in C.ALERT_KINDS:
+        assert len(C.Controller._alert_id(kind, longest).encode()) <= 32, kind
+    assert len("agents".encode()) <= 32
 
 
 # --- shutdown --------------------------------------------------------------------------

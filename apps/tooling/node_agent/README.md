@@ -50,11 +50,11 @@ Run (until `protorig agent` exists, step 3b):
 | B15 | app has heartbeated | silent past the heartbeat QoS's threshold, process alive | detail "not responding"; WARNING `hang:<app>`; both cleared when it recovers | N7, N12 |
 | B16 | app STARTING | no heartbeat (or "running" line) within start-timeout | stays STARTING; WARNING `start:<app>`; cleared when RUNNING | N12 |
 | B17 | app RUNNING | SET_QOS_VARIANT X | RESTARTING "switching to X, by <sender>"; polite stop; start with `--qos-variant X`; RUNNING when its heartbeat reports X within start-timeout; restarts +1 | N13 V3, V4 |
-| B18 | | variant already in use / not in the QoS files / `*` / app not RUNNING | ignored / refused + WARNING `variant:<app>` / refused / refused | N13 V1, V2 |
-| B19 | switch under way | new variant exits, hangs or reports another variant (no-heartbeat apps: exits with an error within fail-window) | started once more on the previous variant; WARNING `variant:<app>` "rolled back"; if that fails too: CRASHED, CRITICAL `crash:<app>`, no more tries | N13 V4 |
+| B18 | | variant already in use / not in the QoS files / `*` / app not RUNNING | ignored / refused + WARNING `var:<app>` / refused / refused | N13 V1, V2 |
+| B19 | switch under way | new variant exits, hangs or reports another variant (no-heartbeat apps: exits with an error within fail-window) | started once more on the previous variant; WARNING `var:<app>` "rolled back"; if that fails too: CRASHED, CRITICAL `crash:<app>`, no more tries | N13 V4 |
 | B20 | app was switched, then stopped | START | starts as its `run:` entry is written | N13 V5 |
 | B21 | | a row's detail is over 128 bytes (any language) | trimmed at a character boundary, ending "…"; the row is still published | N12 rule 5 |
-| B22 | | another agent heartbeats for this node | the one with the higher participant ID stops its apps and exits; both raise CRITICAL `agents:<node>` "two agents for <node>" | N12 rule 2 |
+| B22 | | another agent heartbeats for this node | the one with the higher participant ID stops its apps and exits; both raise CRITICAL `agents` (source `<node>/node_agent`) "two agents for <node>" | N12 rule 2 |
 | B23 | | scenario.yaml changes | logged "restart the agent to use it"; list unchanged | N5 |
 | B24 | | any app prints | line shown as `<node>/<app> \| text`; agent's own as `<node>/node_agent`; license banner once | N8 |
 | B25 | an app floods output | | the agent and the app never block; "N lines dropped" shown | N8 |

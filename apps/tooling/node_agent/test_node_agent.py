@@ -304,7 +304,7 @@ def test_B19_failed_switch_rolls_back(bus, rows, start_agent):
     send(bus, agent, "CMD_SET_QOS_VARIANT", "badvar", V)
     row = rows.wait("badvar", "APP_RUNNING", detail="rolled back", timeout=15)
     assert row.restarts == 2
-    wait_for(lambda: any(a.alert_id == "variant:badvar" and "rolled back" in a.message for a in alerts.all()), 5,
+    wait_for(lambda: any(a.alert_id == "var:badvar" and "rolled back" in a.message for a in alerts.all()), 5,
              "the rollback alert")
 
 
@@ -329,7 +329,7 @@ def test_B22_two_agents_one_leaves(bus, rows, start_agent, start_app):
     assert a1.exited() != a2.exited(), "exactly one must stay"
     leaver = a1 if a1.exited() else a2
     assert leaver.returncode == 0 and any("this one leaves" in l for l in leaver.lines)
-    wait_for(lambda: any(a.alert_id == "agents:pi" for a in alerts.all()), 5, "the two-agents alert")
+    wait_for(lambda: any(a.alert_id == "agents" and a.source == "pi/node_agent" for a in alerts.all()), 5, "the two-agents alert")
 
 
 def test_B23_scenario_change_is_only_logged(bus, rows, start_agent, agent_repo):

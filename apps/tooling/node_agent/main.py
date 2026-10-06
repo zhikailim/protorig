@@ -169,7 +169,7 @@ class Agent:
         mine = str(self.app.participant.instance_handle)
         if not self.twin_warned:
             self.twin_warned = True
-            self.raise_alert("agents:" + self.app.node, "SEVERITY_CRITICAL",
+            self.raise_alert("agents", "SEVERITY_CRITICAL",          # the node is in the source: <node>/node_agent
                              C.fit(f"two agents for {self.app.node}: only one may run"))
         if mine > theirs:
             log(self.who, "ERROR", f"another agent runs node {self.app.node}: this one leaves")

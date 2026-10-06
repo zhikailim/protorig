@@ -140,10 +140,12 @@ Rule: the agent owns the process, the app owns its behaviour.
 - Hang: WARNING `hang:<app>` when an app that has heartbeated goes silent while
   its process is alive; the threshold is read from the heartbeat topic's QoS
   (not a fixed number). Apps that never heartbeat can't be judged.
-- Variant switch failed but rolled back: WARNING `variant:<app>`.
+- Variant switch failed but rolled back: WARNING `var:<app>`.
 - Alerts clear when the app starts or recovers, and when the agent stops
   cleanly; a starting agent clears its node's stale alerts.
-- `check` limits app names to 26 characters (alert ids stay unique).
+- `check` limits app names to 26 characters (alert ids stay unique): ids are
+  `crash:`, `hang:`, `var:` or `start:` + the app name, at most 32 bytes
+  (`Alert.alert_id`); renamed from `variant:` on 6 Oct 2026, which overflowed.
 - The agent's own death is reported by `result_gui` ("machine lost").
 
 ## N8. Local console and log (not sent over DDS)  [approved]
@@ -231,7 +233,7 @@ the Control Panel and `run --live`.
   2. Two agents for one node: an agent keeps listening for another agent
      heartbeat claiming its node, for as long as it runs. If it hears one,
      the agent whose participant ID compares higher stops its apps and
-     exits; both raise CRITICAL "two agents for <node>".
+     exits; both raise CRITICAL `agents` (source `<node>/node_agent`) "two agents for <node>".
   3. A hung app (N7) stays RUNNING with detail "not responding", cleared when
      it recovers. No new state.
   4. The process exit is final: CRASHED, STOPPED and KILLED come from the
@@ -257,7 +259,7 @@ the request itself, so the app never has to pass a message to its launcher.
   - the app is in this node's list and RUNNING, else refused;
   - the variant already in use: ignored and logged;
   - a variant that is not a profile in the QoS files: refused, WARNING alert
-    `variant:<app>`. The agent reads the same QoS file list as the app
+    `var:<app>`. The agent reads the same QoS file list as the app
     (repo, scenario and node files), so a scenario's own variants are known.
 - V3. The switch: AppState RESTARTING ("switching to X, by <sender>"); polite
   stop (forced after 10 s); start again with the `run:` entry's arguments,
@@ -265,7 +267,7 @@ the request itself, so the app never has to pass a message to its launcher.
 - V4. Success = the app's first heartbeat REPORTING THE NEW VARIANT arrives
   within 15 s (room for the Pi's slower start). Anything else (exits, hangs
   while starting, reports another variant) is a failure: started once more
-  on the previous variant, WARNING alert `variant:<app>` ("rolled back"). If
+  on the previous variant, WARNING alert `var:<app>` ("rolled back"). If
   the rollback doesn't succeed by the same test: CRASHED, CRITICAL alert, no
   more tries. Apps that never heartbeat: failure = exits with an error
   within 5 s.

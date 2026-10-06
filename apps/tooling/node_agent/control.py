@@ -24,7 +24,8 @@ ENDED = {NOT_RUNNING, STOPPED, KILLED, CRASHED}         # START may start it
 APP_NAME = re.compile(r"^[a-z][a-z0-9_]*$")             # same rule as `protorig check`
 AGENT = "node_agent"
 DETAIL_BYTES = 128                                      # AppState.detail is string<128> (UTF-8 bytes)
-ALERT_KINDS = ("crash", "hang", "variant", "start")     # alert id = "<kind>:<app>" (N7)
+ALERT_KINDS = ("crash", "hang", "var", "start")         # alert id = "<kind>:<app>" (N7); prefixes of at most
+                                                        # 6 bytes + a 26-character app name fit Alert.alert_id (32)
 SEEN_IDS = 1000                                         # commands remembered (N4)
 
 
@@ -277,7 +278,7 @@ class Controller:
         if variant not in self.known:
             msg = f"unknown QoS variant {variant!r}: not a profile in the QoS files"
             out.append(Log("WARN", f"refused variant switch of {a.name}: {msg}"))
-            out.append(RaiseAlert(self._alert_id("variant", a.name), WARNING, fit(f"{a.name}: {msg}")))
+            out.append(RaiseAlert(self._alert_id("var", a.name), WARNING, fit(f"{a.name}: {msg}")))
             return out
         a.phase, a.target, a.previous = "switching", variant, a.variant                       # B17
         a.end_reason, a.ask_by, a.deadline = "switch", who, now + self.s.stop_grace
@@ -360,7 +361,7 @@ class Controller:
     def _switch_failed(self, a: AppRec, why: str, now: float) -> list:
         out: list = []
         if a.phase == "switching":                                               # V4: roll back once
-            out.append(RaiseAlert(self._alert_id("variant", a.name), WARNING,           # outcome first: may be trimmed
+            out.append(RaiseAlert(self._alert_id("var", a.name), WARNING,               # outcome first: may be trimmed
                                   fit(f"{a.name} rolled back to {a.previous or 'default'}: "
                                       f"{a.target or 'default'} failed ({why})")))
             a.phase, a.target, a.restarts = "rollback", a.previous, a.restarts + 1

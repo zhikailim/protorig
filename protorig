@@ -19,4 +19,5 @@ if [[ -z "$PY" ]]; then
 fi
 
 export PYTHONPATH="$ROOT/libs/py${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONUTF8=1      # text files and output are UTF-8 on every OS (Windows defaults differ)
 exec "$PY" "$ROOT/cli/main.py" "$@"

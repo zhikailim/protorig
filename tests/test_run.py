@@ -66,21 +66,21 @@ def rig(tmp_path):
             shutil.rmtree(d)
     s = root / "scenarios" / SAMPLE
     s.mkdir(parents=True)
-    (s / "scenario.yaml").write_text(yaml.safe_dump(SCENARIO))
-    (s / "README.md").write_text("# sample\n")
+    (s / "scenario.yaml").write_text(yaml.safe_dump(SCENARIO), encoding="utf-8")
+    (s / "README.md").write_text("# sample\n", encoding="utf-8")
     for name, code in (("probe", PROBE), ("crasher", CRASHER)):
         d = s / "apps" / "tooling" / name
         d.mkdir(parents=True)
-        (d / "main.py").write_text(code)
+        (d / "main.py").write_text(code, encoding="utf-8")
     cpp = root / "apps" / "vehicle" / "cpp_thing"
     cpp.mkdir(parents=True)
-    (cpp / "CMakeLists.txt").write_text("# stub\n")
+    (cpp / "CMakeLists.txt").write_text("# stub\n", encoding="utf-8")
     return root
 
 
 def protorig(root: Path, *args, timeout=60) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(root / "cli" / "main.py"), *args],
-                          capture_output=True, text=True, cwd=root, timeout=timeout)
+                          capture_output=True, text=True, encoding="utf-8", cwd=root, timeout=timeout)
 
 
 class RunProcess:
@@ -89,7 +89,7 @@ class RunProcess:
     def __init__(self, root: Path, *args):
         kw = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {}
         self.proc = subprocess.Popen([sys.executable, str(root / "cli" / "main.py"), "run", *args],
-                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=root, **kw)
+                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", cwd=root, **kw)
         self.lines: list[str] = []
         threading.Thread(target=self._read, daemon=True).start()
 
@@ -199,7 +199,7 @@ def test_generated_settings_load_in_connext(tmp_path, kind):
     text = discovery.sim_qos() if kind == "sim" else discovery.node_qos(SCENARIO["nodes"], "desk")
     ElementTree.fromstring(text.encode())                        # well-formed XML (no "--" in comments)
     f = tmp_path / "node_qos.xml"
-    f.write_text(text)
+    f.write_text(text, encoding="utf-8")
     q = REPO / "qos"
     p = dds.QosProvider(";".join(str(x) for x in (q / "base.xml", q / "topics.xml", q / "variants.xml", f)))
     pq = p.participant_qos_from_profile("protorig_node::Participant")
@@ -275,7 +275,7 @@ def test_node_live_and_clean_exit(rig, bus):
     try:
         wait_for(lambda: any(b.app == "probe" and b.node == "desk" for b in beats.all()), 15, "the probe")
         settings = rig / "build" / SAMPLE / "desk" / "node_qos.xml"
-        assert settings.exists() and "127.0.0.1" in settings.read_text()
+        assert settings.exists() and "127.0.0.1" in settings.read_text(encoding="utf-8")
         assert "discovery: settings from node_qos.xml" in run.output
         locs = set()
         for h in bus.participant.discovered_participants():
@@ -316,7 +316,7 @@ GARBAGE = [
 @pytest.mark.parametrize("text", GARBAGE)
 @pytest.mark.parametrize("mode", [["--sim"], ["--node", "a"]])
 def test_fuzz_scenario_files(rig, text, mode):
-    (rig / "scenarios" / SAMPLE / "scenario.yaml").write_text(text)
+    (rig / "scenarios" / SAMPLE / "scenario.yaml").write_text(text, encoding="utf-8")
     out = protorig(rig, "run", SAMPLE, *mode, "--dry-run")
     assert "Traceback" not in out.stdout + out.stderr, out.stdout + out.stderr
 

@@ -131,3 +131,14 @@ def test_terminate_forces_a_process_that_ignores_ctrl_c():
     wait_for(lambda: "ready" in s.lines, 10, "the child to start")
     s.terminate(grace=0.5)
     assert s.exited() and s.returncode != 0
+
+
+def test_apps_print_utf8_whatever_the_os_default():
+    """Windows gives a piped Python its old code page: printing Japanese text
+    would crash the app. Supervised starts apps in UTF-8 mode. The child here
+    is given a pure-ASCII locale, the strictest case."""
+    env = dict(os.environ, LC_ALL="C", PYTHONCOERCECLOCALE="0", PYTHONUTF8="0")
+    env.pop("PYTHONIOENCODING", None)
+    s = Supervised(_py("print('温度 15.0 °C 🙂')"), [], env)
+    assert s.wait_exit(10) == 0, s.output
+    assert s.lines == ["温度 15.0 °C 🙂"]

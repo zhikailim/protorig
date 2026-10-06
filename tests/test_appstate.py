@@ -132,7 +132,7 @@ def test_rows_of_a_dead_agent_show_no_writers(bus):
     qos = ";".join(str(REPO / "qos" / f) for f in QOS_FILES)
     code = AGENT.format(libs=str(REPO / "libs" / "py"), domain=bus.domain, qos=qos)
     r = _reader(bus)
-    agent = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True, env=dict(os.environ))
+    agent = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True, encoding="utf-8", env=dict(os.environ))
     try:
         lines = iter(agent.stdout.readline, "")
         assert any(l.strip() == "WRITTEN" for l in lines)       # after Connext's license banner

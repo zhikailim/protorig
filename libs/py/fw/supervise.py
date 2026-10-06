@@ -113,6 +113,11 @@ class Supervised:
                  watch_launcher: bool = True,
                  on_line: Callable[[str], None] | None = None):
         self._env = dict(env)
+        # Python apps print UTF-8 whatever the OS default, matching how we read
+        # them below. Windows otherwise uses its old code page for pipes: an app
+        # printing Japanese text would crash on its own print().
+        self._env["PYTHONUTF8"] = "1"
+        self._env["PYTHONIOENCODING"] = "utf-8"
         if watch_launcher:
             self._env[LAUNCHER_ENV] = str(os.getpid())
         self._on_line = on_line

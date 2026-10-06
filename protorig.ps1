@@ -19,6 +19,9 @@ if (Test-Path $Venv) {
     exit 2
 }
 
+# Text files and output are UTF-8 on every OS (Windows defaults to its old code page).
+$env:PYTHONUTF8 = "1"
+
 $LibsPy = Join-Path $Root "libs\py"
 $env:PYTHONPATH = if ($env:PYTHONPATH) { "$LibsPy;$env:PYTHONPATH" } else { $LibsPy }
 

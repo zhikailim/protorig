@@ -47,7 +47,7 @@ sys.exit(app.run())
 def probe_dir(tmp_path):
     d = tmp_path / "probe"
     d.mkdir()
-    (d / "main.py").write_text(PROBE)
+    (d / "main.py").write_text(PROBE, encoding="utf-8")
     return d
 
 
@@ -243,7 +243,7 @@ def test_app_stops_when_its_launcher_dies(bus, probe_dir):
     seen, close = _heartbeat_states(bus, "n6-node")
     env = dict(os.environ, PYTHONPATH=str(REPO / "libs" / "py"), PYTHONUNBUFFERED="1")
     code = LAUNCHER.format(libs=str(REPO / "libs" / "py"), probe=str(probe_dir / "main.py"), domain=bus.domain)
-    launcher = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True, env=env)
+    launcher = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True, encoding="utf-8", env=env)
     child = None
     try:
         child = int(launcher.stdout.readline().split()[1])
@@ -326,7 +326,7 @@ def test_unknown_variant_at_start_refuses(bus, start_app, probe_dir):
 def test_help_lists_app_arguments(probe_dir):
     import os
     env = dict(os.environ, PYTHONPATH=str(REPO / "libs" / "py"))
-    out = subprocess.run([sys.executable, str(probe_dir / "main.py"), "--help"], capture_output=True, text=True, env=env)
+    out = subprocess.run([sys.executable, str(probe_dir / "main.py"), "--help"], capture_output=True, text=True, encoding="utf-8", env=env)
     assert out.returncode == 0 and "--rate" in out.stdout and "--qos-variant" in out.stdout
 
 
@@ -335,7 +335,7 @@ def test_domain_comes_from_scenario(tmp_path, monkeypatch):
     import fw.app
     d = tmp_path / "scenarios" / "sample-scenario"
     d.mkdir(parents=True)
-    (d / "scenario.yaml").write_text("domain: 7\n")
+    (d / "scenario.yaml").write_text("domain: 7\n", encoding="utf-8")
     monkeypatch.setattr(fw.app, "ROOT", tmp_path)
     assert fw.app.scenario_domain("sample-scenario") == 7
     assert fw.app.scenario_domain("no-such-scenario") is None
@@ -388,7 +388,7 @@ def repo_copy(tmp_path):
 
 def _protorig(root: Path, *args) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(root / "cli" / "main.py"), *args],
-                          capture_output=True, text=True, cwd=root)
+                          capture_output=True, text=True, encoding="utf-8", cwd=root)
 
 
 def test_new_app_then_its_own_tests_pass(repo_copy):
@@ -397,13 +397,13 @@ def test_new_app_then_its_own_tests_pass(repo_copy):
     assert _protorig(repo_copy, "new", "app", "fresh_twin", "--kind", "sim").returncode == 0
     d = repo_copy / "apps" / "tooling" / "fresh_gui"
     assert (d / "main.py").exists() and (d / "test_fresh_gui.py").exists()
-    assert "{{" not in (d / "main.py").read_text() + (d / "test_fresh_gui.py").read_text()
+    assert "{{" not in (d / "main.py").read_text(encoding="utf-8") + (d / "test_fresh_gui.py").read_text(encoding="utf-8")
     try:
         import rti.connextdds  # noqa: F401
     except ImportError:
         pytest.skip("needs Connext to run the generated tests")
     r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
-                        str(d), str(repo_copy / "apps" / "sim" / "fresh_twin")], capture_output=True, text=True, cwd=repo_copy)
+                        str(d), str(repo_copy / "apps" / "sim" / "fresh_twin")], capture_output=True, text=True, encoding="utf-8", cwd=repo_copy)
     assert r.returncode in (0, 5) and ("6 passed" in r.stdout or "skipped" in r.stdout), r.stdout[-2000:]
 
 

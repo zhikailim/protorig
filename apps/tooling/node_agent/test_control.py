@@ -437,3 +437,12 @@ def test_fuzz_never_breaks_its_own_rules():
                 assert a.state in C.ALIVE, (step, name, a.state)
             elif a.state in C.ALIVE:
                 pytest.fail(f"step {step}: {name} is {a.state} but has no process")
+
+
+def test_scenario_not_utf8_gives_a_clear_reason(tmp_path):
+    from fw.scenario import node_entries
+    d = tmp_path / "scenarios" / "s"
+    d.mkdir(parents=True)
+    (d / "scenario.yaml").write_bytes("nodes: {pi: {run: [größe]}}\n".encode("cp1252"))
+    with pytest.raises(ValueError, match="isn't UTF-8"):
+        node_entries(tmp_path, "s", "pi")

@@ -80,6 +80,8 @@ def load_scenarios() -> list[Scenario]:
                 if not isinstance(s.data, dict):
                     s.error = "scenario.yaml must be a mapping (key: value pairs)"
                     s.data = {}
+            except UnicodeDecodeError:
+                s.error = "scenario.yaml isn't UTF-8 text: save it as UTF-8"
             except yaml.YAMLError as e:
                 s.error = f"scenario.yaml is not valid YAML: {e}".replace("\n", " ")
         out.append(s)

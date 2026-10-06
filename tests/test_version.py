@@ -9,7 +9,7 @@ import repo  # noqa: E402
 
 
 def test_requirements_pin_matches_cli():
-    text = (REPO / "bootstrap" / "requirements.txt").read_text()
+    text = (REPO / "bootstrap" / "requirements.txt").read_text(encoding="utf-8")
     m = re.search(r"^rti\.connext~=(\d+\.\d+)\.\d+", text, re.M)
     assert m, "rti.connext pin missing from bootstrap/requirements.txt"
     assert m.group(1) == repo.CONNEXT_VERSION

@@ -43,7 +43,8 @@ class Console:
     lines over without ever waiting; if printing falls behind, lines are dropped
     and counted, so neither an app nor the agent is slowed down."""
 
-    def __init__(self):
+    def __init__(self, out=None):
+        self._out = out or (lambda line: print(line, flush=True))
         self._q: queue.Queue = queue.Queue(maxsize=CONSOLE_LINES)
         self._dropped = 0
         self._lock = threading.Lock()
@@ -65,11 +66,11 @@ class Console:
                     continue
                 self._banner.add(text)
             try:
-                print(f"{who} | {text}", flush=True)
+                self._out(f"{who} | {text}")
                 with self._lock:
                     dropped, self._dropped = self._dropped, 0
                 if dropped:
-                    print(f"{who} | ... {dropped} lines dropped (output too fast to show)", flush=True)
+                    self._out(f"{who} | ... {dropped} lines dropped (output too fast to show)")
             except (OSError, ValueError):
                 pass                                  # our own console is gone: keep supervising
 

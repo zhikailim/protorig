@@ -51,15 +51,15 @@ def real(tmp_path, monkeypatch):
         @staticmethod
         def edit(path, old, new, count=1):
             p = tmp_path / path
-            text = p.read_text()
+            text = p.read_text(encoding="utf-8")
             assert old in text, f"test setup: '{old}' not in {path}"
-            p.write_text(text.replace(old, new, count))
+            p.write_text(text.replace(old, new, count), encoding="utf-8")
 
         @staticmethod
         def write(path, text):
             p = tmp_path / path
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(text)
+            p.write_text(text, encoding="utf-8")
 
         @staticmethod
         def findings():
@@ -376,7 +376,7 @@ def test_checker_agrees_with_connext(label):
 
     import yaml
     offered = check_contract._offer_from_yaml(
-        yaml.safe_load((REPO / "external/tc397/external.yaml").read_text())["topics"]["Example Temperature"]["writer"])
+        yaml.safe_load((REPO / "external/tc397/external.yaml").read_text(encoding="utf-8"))["topics"]["Example Temperature"]["writer"])
 
     provider = check_contract.load_qos_provider(dds)
     provider.default_profile = check_contract.DEFAULT_PROFILE

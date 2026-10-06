@@ -34,12 +34,12 @@ GOOD_SCENARIO = {
 def _app(root: Path, kind: str, name: str, language: str, extra: dict | None = None):
     d = root / "apps" / kind / name
     d.mkdir(parents=True)
-    (d / ("CMakeLists.txt" if language == "cpp" else "main.py")).write_text("# stub\n")
-    (d / "README.md").write_text(f"# {name}\n")
-    (d / f"test_{name}.py").write_text("def test_x(): pass\n")
+    (d / ("CMakeLists.txt" if language == "cpp" else "main.py")).write_text("# stub\n", encoding="utf-8")
+    (d / "README.md").write_text(f"# {name}\n", encoding="utf-8")
+    (d / f"test_{name}.py").write_text("def test_x(): pass\n", encoding="utf-8")
     for fname, content in (extra or {}).items():
         (d / fname).parent.mkdir(parents=True, exist_ok=True)
-        (d / fname).write_text(content)
+        (d / fname).write_text(content, encoding="utf-8")
     return d
 
 
@@ -55,7 +55,7 @@ def fake(tmp_path, monkeypatch):
     _app(tmp_path, "vehicle", "monitor", "cpp")
     _app(tmp_path, "sim", "ecu_twin", "py")
     (tmp_path / "external" / "ecu").mkdir(parents=True)
-    (tmp_path / "external" / "ecu" / "external.yaml").write_text("topics: {}\n")
+    (tmp_path / "external" / "ecu" / "external.yaml").write_text("topics: {}\n", encoding="utf-8")
 
     class F:
         root = tmp_path
@@ -65,9 +65,9 @@ def fake(tmp_path, monkeypatch):
             d = tmp_path / "scenarios" / name
             d.mkdir(parents=True, exist_ok=True)
             text = raw if raw is not None else yaml.safe_dump(data if data is not None else GOOD_SCENARIO)
-            (d / "scenario.yaml").write_text(text)
+            (d / "scenario.yaml").write_text(text, encoding="utf-8")
             if readme:
-                (d / "README.md").write_text("# story\n")
+                (d / "README.md").write_text("# story\n", encoding="utf-8")
             return d
 
         @staticmethod
@@ -161,6 +161,13 @@ def test_node_with_no_demo_apps_is_only_a_warning(fake, run):
     assert any("no demo apps in run: yet" in w for w in fake.warnings())
 
 
+def test_scenario_not_utf8_is_reported_not_crashing(fake):
+    d = fake.root / "scenarios" / "demo-a"
+    d.mkdir(parents=True)
+    (d / "scenario.yaml").write_bytes("description: Größe\nnodes: {}\n".encode("cp1252"))   # saved as "ANSI"
+    assert any("isn't UTF-8" in e for e in fake.errors())
+
+
 def test_invalid_yaml_is_reported_not_crashing(fake):
     fake.scenario(raw="description: x\nnodes: [unclosed\n")
     assert any("not valid YAML" in e for e in fake.errors())
@@ -218,7 +225,7 @@ def test_scenario_local_app_is_found(fake):
     d = fake.scenario(_mutated(nodes__hpc__run=["agent", "special"]))
     local = d / "apps" / "vehicle" / "special"
     local.mkdir(parents=True)
-    (local / "CMakeLists.txt").write_text("# stub\n")
+    (local / "CMakeLists.txt").write_text("# stub\n", encoding="utf-8")
     assert fake.errors() == []
 
 
@@ -231,19 +238,19 @@ def test_same_name_in_two_kinds_is_ambiguous(fake):
 # --- language policy -----------------------------------------------------------
 
 def test_python_in_vehicle_app_is_rejected(fake):
-    (fake.root / "apps" / "vehicle" / "agent" / "helper.py").write_text("x = 1\n")
+    (fake.root / "apps" / "vehicle" / "agent" / "helper.py").write_text("x = 1\n", encoding="utf-8")
     assert any("Python is not allowed" in e for e in fake.errors())
 
 
 def test_python_hidden_in_subfolder_is_rejected(fake):
     sub = fake.root / "apps" / "vehicle" / "agent" / "src" / "deep"
     sub.mkdir(parents=True)
-    (sub / "sneaky.py").write_text("x = 1\n")
+    (sub / "sneaky.py").write_text("x = 1\n", encoding="utf-8")
     assert any("sneaky.py" in e for e in fake.errors())
 
 
 def test_tests_next_to_vehicle_app_are_allowed(fake):
-    (fake.root / "apps" / "vehicle" / "agent" / "conftest.py").write_text("\n")
+    (fake.root / "apps" / "vehicle" / "agent" / "conftest.py").write_text("\n", encoding="utf-8")
     assert fake.errors() == []
 
 
@@ -283,7 +290,7 @@ def test_tracked_forbidden_files_are_rejected(fake, path):
     subprocess.run(["git", "init", "-q", str(fake.root)], check=True)
     f = fake.root / path
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("secret\n")
+    f.write_text("secret\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(fake.root), "add", "-f", path], check=True)
     assert any(path in str(x) for x in fake.findings() if x.severity == check.ERROR)
 
@@ -291,8 +298,8 @@ def test_tracked_forbidden_files_are_rejected(fake, path):
 def test_ignored_license_is_fine(fake):
     """A license that is present but git-ignored is exactly right."""
     subprocess.run(["git", "init", "-q", str(fake.root)], check=True)
-    (fake.root / ".gitignore").write_text("*.dat\n")
-    (fake.root / "rti_license.dat").write_text("secret\n")
+    (fake.root / ".gitignore").write_text("*.dat\n", encoding="utf-8")
+    (fake.root / "rti_license.dat").write_text("secret\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(fake.root), "add", "."], check=True)
     assert fake.errors() == []
 
@@ -334,22 +341,22 @@ def test_garbage_never_crashes(fake, raw):
 LAUNCHER = str(REPO / ("protorig.cmd" if os.name == "nt" else "protorig"))
 
 def test_launcher_help_and_list():
-    out = subprocess.run([LAUNCHER, "list"], capture_output=True, text=True)
+    out = subprocess.run([LAUNCHER, "list"], capture_output=True, text=True, encoding="utf-8")
     # Every scenario folder is listed, whatever the scenarios are called (no demo names here).
     real = [d.name for d in (REPO / "scenarios").iterdir() if (d / "scenario.yaml").exists()]
     assert out.returncode == 0 and all(name in out.stdout for name in real), out.stdout
-    out = subprocess.run([LAUNCHER, "--help"], capture_output=True, text=True)
+    out = subprocess.run([LAUNCHER, "--help"], capture_output=True, text=True, encoding="utf-8")
     assert out.returncode == 0 and "check" in out.stdout
 
 
 def test_launcher_check_exit_code_matches_findings():
-    out = subprocess.run([LAUNCHER, "check"], capture_output=True, text=True)
+    out = subprocess.run([LAUNCHER, "check"], capture_output=True, text=True, encoding="utf-8")
     has_errors = "error(s)" in out.stdout
     assert out.returncode == (1 if has_errors else 0), out.stdout
 
 
 def test_planned_verb_says_not_built():
-    out = subprocess.run([LAUNCHER, "deploy", "hpc-pi"], capture_output=True, text=True)
+    out = subprocess.run([LAUNCHER, "deploy", "hpc-pi"], capture_output=True, text=True, encoding="utf-8")
     assert out.returncode == 3 and "not built yet" in out.stdout
 
 

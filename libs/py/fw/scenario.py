@@ -92,6 +92,8 @@ def node_entries(root: Path, scenario: str, node: str) -> list[Entry]:
     f = root / "scenarios" / scenario / "scenario.yaml"
     try:
         data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+    except UnicodeDecodeError:
+        raise ValueError(f"can't read {f}: it isn't UTF-8 text (save it as UTF-8)") from None
     except (OSError, yaml.YAMLError) as e:
         raise ValueError(f"can't read {f}: {e}".replace("\n", " ")) from None
     nodes = data.get("nodes") if isinstance(data, dict) else None

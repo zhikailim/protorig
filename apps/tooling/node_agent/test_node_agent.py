@@ -80,13 +80,14 @@ def agent_repo(tmp_path_factory):
     (s / "scenario.yaml").write_text(yaml.safe_dump({
         "description": "node agent tests", "domain": 0,
         "nodes": {"pi": {"ip": "127.0.0.1", "os": "linux", "run": PI_RUN},
-                  "vm": {"ip": "203.0.113.9", "os": "linux", "run": ["mon"]}}}, allow_unicode=True))
+                  "vm": {"ip": "203.0.113.9", "os": "linux", "run": ["mon"]}}}, allow_unicode=True),
+        encoding="utf-8")                    # explicit: Windows would otherwise write its old code page
     for name in ("mon", "worker", "quiet", "stubborn", "hanger", "badvar", "flood", "uni"):
         d = s / "apps" / "tooling" / name
         d.mkdir(parents=True)
-        (d / "main.py").write_text(PROBE)
+        (d / "main.py").write_text(PROBE, encoding="utf-8")
     (root / "apps" / "vehicle" / "cpp_thing").mkdir(parents=True)
-    (root / "apps" / "vehicle" / "cpp_thing" / "CMakeLists.txt").write_text("# stub\n")
+    (root / "apps" / "vehicle" / "cpp_thing" / "CMakeLists.txt").write_text("# stub\n", encoding="utf-8")
     return root
 
 
@@ -336,14 +337,14 @@ def test_B23_scenario_change_is_only_logged(bus, rows, start_agent, agent_repo):
     agent = start_agent()
     rows.wait("mon", "APP_NOT_RUNNING")
     f = agent_repo / "scenarios" / SCEN / "scenario.yaml"
-    original = f.read_text()
+    original = f.read_text(encoding="utf-8")
     try:
-        f.write_text(original + "\n# changed\n")
+        f.write_text(original + "\n# changed\n", encoding="utf-8")
         wait_for(lambda: any("restart the agent to use it" in l for l in agent.lines), 6, "the warning")
         send(bus, agent, "CMD_START_APP", "mon")
         rows.wait("mon", "APP_RUNNING")
     finally:
-        f.write_text(original)
+        f.write_text(original, encoding="utf-8")
 
 
 def test_B25_flooding_app_never_blocks_the_agent(bus, rows, start_agent):
@@ -357,16 +358,14 @@ def test_B25_flooding_app_never_blocks_the_agent(bus, rows, start_agent):
     assert time.monotonic() - t0 < 4
 
 
-def test_B25_console_drops_and_counts_when_printing_falls_behind(monkeypatch):
+def test_B25_console_drops_and_counts_when_printing_falls_behind():
     sys.path.insert(0, str(HERE))
-    import builtins
     import main as agent_main
     printed = []
-    def slow_print(*a, **k):
+    def slow_out(line):                      # a console that can't keep up
         time.sleep(0.001)
-        printed.append(" ".join(map(str, a)))
-    monkeypatch.setattr(builtins, "print", slow_print)
-    c = agent_main.Console()
+        printed.append(line)
+    c = agent_main.Console(out=slow_out)
     for i in range(agent_main.CONSOLE_LINES * 3):
         c.put("pi/flood", f"line {i}")
     wait_for(lambda: any("lines dropped" in p for p in printed), 10, "the dropped-lines notice")

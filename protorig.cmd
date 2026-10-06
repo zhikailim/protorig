@@ -17,5 +17,8 @@ if defined PYTHONPATH (
     set "PYTHONPATH=%ROOT%\libs\py"
 )
 
+rem Text files and output are UTF-8 on every OS (Windows defaults to its old code page).
+set "PYTHONUTF8=1"
+
 %PY% "%ROOT%\cli\main.py" %*
 exit /b %ERRORLEVEL%

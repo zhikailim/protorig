@@ -4,7 +4,7 @@ How to take a demo from "machines switched off" to "every app running".
 Written for people new to this rig. The full design is in
 [WORKFLOW.md](WORKFLOW.md).
 
-Status (29 Sep 2026): some commands below are still being built.
+Status (7 Oct 2026): some commands below are still being built.
 Each step is marked:
 
     [available]  works today
@@ -102,7 +102,11 @@ beats behave the same in both.
    It must show no errors for your scenario.
 
 5. Check the IPs: every managed node's `ip:` in `scenario.yaml` must be
-   that machine's real address on the rig's switch.
+   that machine's real address on the rig's switch. Give each machine a
+   fixed IP. If yours differ, edit the `ip:` lines once and copy the same
+   `scenario.yaml` to every machine (it must be identical everywhere).
+   This is how each machine knows which node it is: you never type node
+   names.
 
 ### Stage 1: power on the external devices
 
@@ -111,15 +115,18 @@ beats behave the same in both.
 
 ### Stage 2: start one agent per managed machine  [planned]
 
-7. On each managed machine, once:
+7. On each managed machine, once, the same line everywhere:
 
-       protorig agent start <scenario> --node <this machine's node> --background
+       protorig agent start <scenario> --background
 
-   Later this will happen automatically at boot.
+   It finds this machine's node from its IP and says so first:
+   `this machine is hpc-pi (172.23.100.121)`. Later this will happen
+   automatically at boot.
 
 8. Each agent then:
-   - refuses if this machine doesn't have the node's IP (wrong machine),
-     or if an agent for that node is already running;
+   - refuses if no node has this machine's IP, if the node's `os:`/`arch:`
+     don't match this machine (an IP that moved), or if an agent for that
+     node is already running;
    - writes this machine's discovery settings (the other nodes as peers,
      DDS bound to this machine's IP);
    - reads only its own node's `run:` list;
@@ -127,9 +134,12 @@ beats behave the same in both.
 
    No apps are running yet. The agents are waiting.
 
-9. Check any node's agent, from any machine:
+9. Check the whole rig, from any machine:
 
-       protorig agent status <scenario> --node <node>
+       protorig agent status <scenario>
+
+   One line per machine: agent alive or missing, and its apps.
+   Add `--node <node>` for one machine only.
 
 ### Stage 3: bring the demo up, from one machine  [planned]
 
@@ -167,7 +177,7 @@ beats behave the same in both.
 
 17. To stop an agent as well, on its own machine:
 
-        protorig agent stop <scenario> --node <node>
+        protorig agent stop <scenario>
 
 
 ## 5. Rehearsing on your desk (--sim)
@@ -215,9 +225,17 @@ App `RUNNING` but no heartbeat
 
 ## 7. When something doesn't come up
 
-`agent start` says "this machine doesn't have <ip>"
-: You're on the wrong machine, or the IP in `scenario.yaml` is wrong.
-  Run it on the right machine, or fix the IP.
+`agent start` says "this machine has none of these IPs" (it lists them)
+: You're on a machine that isn't in the scenario, or the IPs in
+  `scenario.yaml` are wrong. Fix the `ip:` lines (and copy the file to
+  every machine), or use `--sim` on a single PC.
+
+`agent start` says "this machine has the IPs of several nodes"
+: One machine hosts two nodes. Name the one you mean: `--node <node>`.
+
+`agent start` says the node's os or arch doesn't match this machine
+: Its IP now belongs to another machine (e.g. DHCP gave the VM the Pi's
+  address). Give the machines fixed IPs, or fix `scenario.yaml`.
 
 `agent start` says "an agent for <node> is already running"
 : It was started twice. `agent status` shows it; `agent stop` it first if
@@ -247,6 +265,9 @@ Until agents and `--live` are built, bring the rig up by hand, one command
 per machine:
 
     protorig run <scenario> --node <this machine's node>
+
+Planned: `protorig run <scenario>`, the node found from this machine's IP
+as in step 7.
 
 It starts that machine's apps directly (same wrong-machine check and
 discovery settings), shows their output with a `node/app` prefix, and
@@ -350,9 +371,11 @@ agent only knows its own version.
 
 3. Stage 2: one agent per machine.
 
-       Windows> protorig agent start adas-failover --node windows --background
-       VM$      protorig agent start adas-failover --node hpc-vm  --background
-       Pi$      protorig agent start adas-failover --node hpc-pi  --background
+       Windows> protorig agent start adas-failover --background
+       VM$      protorig agent start adas-failover --background
+       Pi$      protorig agent start adas-failover --background
+
+   Each prints which node it is: `windows`, `hpc-vm`, `hpc-pi`.
 
    The node board shows three machines and 9 app rows, all grey.
 

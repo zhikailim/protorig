@@ -14,6 +14,9 @@ behaviour rows B1-B27 in apps/tooling/node_agent/README.md. Not built yet: the
 - N12: approved 5 Oct 2026.
 - N13 (variant switching, replaces the note protocol S1-S9): approved 30 Sep 2026.
 - N14 (what an app obeys): approved 30 Sep 2026.
+- N1 (changed): `--node` optional, the node found from this machine's IP
+  (run.md U13); `status` without a node shows every node. Approved 7 Oct
+  2026, not built.
 The bring-up flow these requirements produce is described in
 [../QUICKSTART.md](../QUICKSTART.md).
 
@@ -27,13 +30,17 @@ can be brought up and controlled from one machine.
 - Managed nodes only (not `external: true`): today Windows, VM, Pi.
 - Commands, run on that machine:
 
-      protorig agent start  <scenario> --node <node> [--background] [--domain N]
-      protorig agent stop   <scenario> --node <node>
-      protorig agent status <scenario> --node <node>
+      protorig agent start  <scenario> [--node <node>] [--background] [--domain N]
+      protorig agent stop   <scenario> [--node <node>]
+      protorig agent status <scenario> [--node <node>]
 
+- Without `--node`, `start` and `stop` act for this machine's node, found
+  from its IP (run.md U13). So the same line works on every machine, and
+  whoever runs the demo needs only the scenario name. (Changed 7 Oct 2026.)
 - `start` checks: scenario readable, node exists and is managed, this machine
-  has the node's IP (wrong-machine guard), no agent for this node already heard
-  on DDS (listens about 3 s; a duplicate refuses). Then it writes the node's
+  has the node's IP and its os/arch (wrong-machine guard, run.md U5), no
+  agent for this node already heard on DDS (listens about 3 s; a duplicate
+  refuses). Then it writes the node's
   discovery settings (as `run --node`) and runs the agent.
 - After starting, the agent waits for commands; it starts no apps by itself.
 - Foreground by default (Ctrl-C stops the agent and its apps). `--background`:
@@ -42,7 +49,11 @@ can be brought up and controlled from one machine.
   has gone; works on Windows via a stop-request file.
 - `status`: listens about 3 s for heartbeats from that node; prints the agent's
   state and its running apps; exit 0 if alive, 1 if not. Works from any rig
-  machine (no wrong-machine guard; uses this machine's own settings).
+  machine (no wrong-machine guard; uses this machine's own discovery
+  settings, its node found as in run.md U13).
+  Without `--node` (changed 7 Oct 2026): every managed node of the scenario,
+  one line each (agent alive or missing, its apps); exit 0 only if every
+  agent is alive. One command answers "is the rig ready?".
 - One scenario per agent; scenario's domain unless `--domain` is given.
 - Code: `apps/tooling/node_agent/` (Python on fw.App: rig tooling, never
   shipped in a vehicle); participant `<node>/node_agent`.

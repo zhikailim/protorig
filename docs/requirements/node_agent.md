@@ -17,6 +17,8 @@ behaviour rows B1-B27 in apps/tooling/node_agent/README.md. Not built yet: the
 - N1 (changed): `--node` optional, the node found from this machine's IP
   (run.md U13); `status` without a node shows every node. Approved 7 Oct
   2026, not built.
+- N1a (how `--background` start and `stop` work): PROPOSED 7 Oct 2026, for
+  review.
 The bring-up flow these requirements produce is described in
 [../QUICKSTART.md](../QUICKSTART.md).
 
@@ -44,9 +46,10 @@ can be brought up and controlled from one machine.
   discovery settings (as `run --node`) and runs the agent.
 - After starting, the agent waits for commands; it starts no apps by itself.
 - Foreground by default (Ctrl-C stops the agent and its apps). `--background`:
-  the command returns at once; output goes to `build/<scenario>/<node>/agent.log`.
-- `stop`: stops a background agent politely with its apps and waits until it
-  has gone; works on Windows via a stop-request file.
+  the command returns once the agent is up (N1a); output goes to
+  `build/<scenario>/<node>/agent.log`.
+- `stop`: stops the agent politely with its apps and waits until it has
+  gone (N1a).
 - `status`: listens about 3 s for heartbeats from that node; prints the agent's
   state and its running apps; exit 0 if alive, 1 if not. Works from any rig
   machine (no wrong-machine guard; uses this machine's own discovery
@@ -57,6 +60,67 @@ can be brought up and controlled from one machine.
 - One scenario per agent; scenario's domain unless `--domain` is given.
 - Code: `apps/tooling/node_agent/` (Python on fw.App: rig tooling, never
   shipped in a vehicle); participant `<node>/node_agent`.
+
+## N1a. Background start and stop  [PROPOSED 7 Oct 2026, for review]
+
+Why a file: `stop` must work the same on Windows and Linux, and be testable
+on both. Signals differ (Windows can't send a polite stop to a detached
+process, only a hard kill), and
+a DDS "stop" command would let anyone on the network stop an agent, which
+N4 avoids. A stop file needs local access to the machine, like Ctrl-C.
+
+Files, in `build/<scenario>/<node>/` (git-ignored, this machine only):
+
+| File | Written by | Holds |
+|---|---|---|
+| `agent.pid` | the agent, at start | its process ID and the process's start time |
+| `agent.stop` | `agent stop` | the process ID of the agent it wants stopped |
+| `agent.log` | the agent, with `--background` | its output |
+
+1. `start --background`: starts the agent detached from the terminal (it
+   keeps running when the terminal closes), then waits for the agent's first
+   heartbeat on DDS and returns 0 with `agent for <node> is up (log: ...)`.
+   No heartbeat within 15 s: it stops that agent again (steps 3-5) and
+   prints the last lines of `agent.log`; exit 1.
+2. The agent writes `agent.pid` at start, in the foreground too, so `stop`
+   works from a second terminal either way, and deletes it whenever it
+   stops cleanly (Ctrl-C or `stop`). A background agent doesn't
+   watch the terminal that started it (N6 is for apps, not the agent).
+3. `stop`: reads `agent.pid`. No file, or that process isn't the agent any
+   more (not running, or its start time differs: the ID was reused):
+   "no agent running for <node>", removes the stale files, exit 0. Otherwise it
+   writes `agent.stop` holding that PID, atomically (written to a temporary
+   name, then renamed), so the agent never reads half a file.
+4. The agent looks for `agent.stop` every second. Its own PID: it stops as on
+   Ctrl-C (apps stopped politely, forced after `--stop-grace`, rows
+   disposed), deletes `agent.pid` and `agent.stop`, exits 0. Another PID (a
+   leftover from an earlier agent): deleted and ignored, so an old stop
+   request can never stop a new agent.
+5. `stop` waits for that process to end: up to `--stop-grace` + 5 s,
+   printing progress. Still running: exit 1, "didn't stop: `agent stop
+   --force` kills it".
+6. `stop --force` kills the process, but only if it is still the agent: its
+   start time must match the one in `agent.pid` (Linux and Windows; on any
+   other OS `--force` refuses and says to end it by hand). That guards
+   against a process ID reused by an unrelated program after the agent
+   died. The killed agent's apps notice within about 1 s and stop
+   themselves (N6 launcher watch); a hung app doesn't: its row shows "agent
+   lost" (N12 rule 1) and it has to be ended by hand.
+7. `start` when `agent.pid` names a process that is still the agent: refused,
+   "an agent for <node> is already running (process N)", even before the
+   DDS check (which catches an agent on another machine claiming the same
+   node).
+
+Not included: starting at boot (ROADMAP row 22); stopping an agent from
+another machine (use `stop` on that machine).
+
+Tests (on Linux and Windows): background start returns only after the
+heartbeat; start twice refused; stop then stop again; stop with no agent;
+a stale `agent.stop` naming another PID is ignored and deleted; a stale
+`agent.pid` naming a dead or reused PID; `--force` on an agent that ignores
+the stop file; `--force` refused for a reused PID; Ctrl-C in the foreground
+still works; fuzzed file contents (empty, junk, huge, wrong encoding) never
+crash either side.
 
 ## N2. The agent is part of the framework, not the story  [approved]
 

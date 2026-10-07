@@ -174,12 +174,13 @@ Optionally add a separate "Talk track" list with one line per beat for the prese
    | Uniquely DDS | Is it hard to achieve with SOME/IP, MQTT, or custom code? |
    | Credible | Would an engineer accept it as not rigged? |
    | Reusable | Does it transfer to other industries/sub-categories? |
+   | Simple | Is this the fewest apps, topics and beats that still prove the value? Name anything that could be cut. |
 
 3. **Red-team objections**: the 2-3 strongest objections from a skeptic persona, and the answer (or gap).
 4. **Gaps and actions**: numbered list of open decisions and spikes.
 5. **Verdict**: one of `READY FOR STAGE 2` / `ITERATE` / `DROP`, with one sentence of reasoning.
 
-**Exit rule (Gate G0):** proceed to the scenario README only when the verdict is `READY FOR STAGE 2`, no scorecard item is Low, and all feasibility risks are `PASSED` or `ACCEPTED`.
+**Exit rule (Gate G0):** proceed to the scenario README only when the verdict is `READY FOR STAGE 2`, no scorecard item is Low (Simple included: cut before proceeding), and all feasibility risks are `PASSED` or `ACCEPTED`.
 
 ---
 ---
@@ -289,6 +290,7 @@ Scorecard:
 | Uniquely DDS | Medium | Audience may say "our supervisor does that"; no baseline comparison yet |
 | Credible | High | Physical cable pull on real hardware, measured numbers |
 | Reusable | High | Same pattern fits mining haul trucks and drone flight computers |
+| Simple | High | 3 apps (planner runs twice), 2 topics, 3 beats; each beat maps to a challenge, nothing to cut |
 
 Red-team objections:
 - "Our in-house supervisor already does this." Gap: add a baseline comparison beat, or show the code line count difference.

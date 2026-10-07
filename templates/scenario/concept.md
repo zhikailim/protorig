@@ -80,6 +80,7 @@ Traceability:
 | Uniquely DDS | | |
 | Credible | | |
 | Reusable | | |
+| Simple | | |
 
 Red-team objections:
 -

@@ -367,6 +367,9 @@ Different from `external/` (systems built outside this repo). Pinned as git subm
 - First entry: RTI Perftest (v4.3, EPL-1.0).
 
 ## Planned bricks
+
+Priority and state of all planned work, these bricks and the deferred items below included: [ROADMAP.md](ROADMAP.md).
+
 - **`perf_runner` + GUI widgets:** runs RTI Perftest across nodes with presets (`raw-udp`, `dds-udp`, `dds-shm`, `zero-copy`) and N-to-M plans from a scenario's `perf.yaml`: assigns publisher/subscriber IDs and counts, `-latencyTest` only on publisher 0, sweeps sizes, merges CSV. Guards: participants-per-host limit in the peer settings; `dds-shm` rejected across hosts. Perftest has no topic-name option, so parallel groups use separate domains. Measures the ceiling.
 - **`loadgen`:** our own C++ brick for realistic load: many topics per process, each with its own rate, size and QoS, from a scenario's `traffic.yaml`; per-topic latency and loss. Only as realistic as its profile, so prefer customer data (architecture docs or recorded traffic).
 - **In-app latency probe in `fw`:** timestamps in samples, histograms, round-trips where possible so no clock sync is needed.

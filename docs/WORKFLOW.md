@@ -373,12 +373,13 @@ Different from `external/` (systems built outside this repo). Pinned as git subm
 
 ## Deferred on purpose (decided, not built)
 
-Each can be added later without changing anything already built, because each is a new topic.
+Each can be added later without changing anything already built (most are a new topic).
 
 - **Machine CPU and memory** (`_sys/MachineStatus`, keyed by node, published by `node_agent` once a second): would show under each machine on the node board. Needs the `psutil` package, which doesn't support QNX. Deferred for simplicity (29 Sep 2026).
 - **Forwarding app output** (`_sys/AppLog`, one sample per line, best effort, recent lines only): lets Windows show what a Pi app prints, with no SSH. `node_agent` already captures every line (N8), so this is one extra publish. Deferred (30 Sep 2026). Structured results such as Perftest's go on their own topic from the app itself (see `perf_runner` above).
 - **File transfer between nodes:** not planned; use a shared folder or `scp`.
 - **Scenario QoS file** (`scenarios/<name>/qos.xml`, loaded after the repo's QoS): lets a scenario tune topic QoS and provide a participant profile that the generated discovery profile builds on (UDP buffer sizes, message size, zero-copy), so performance demos aren't limited to the shared defaults. Trigger: the first performance demo (e.g. video streaming). Deferred (30 Sep 2026).
+- **Firewall automation** (`protorig firewall`, also run by bootstrap step 6): on Windows, one inbound rule by port (UDP, the scenario domain's range, e.g. 7400-7649 for domain 0) from `LocalSubnet` on all profiles, so it covers Python, C++ apps and RTI tools and needs no change at a new venue; removes block rules left when someone clicked Cancel on Windows' "allow access" prompt (a block rule beats any allow rule); `--remove` undoes it. On Linux, prints the `ufw`/`firewalld` line if one is active. Plus a no-admin check in `agent status` and `run --live` when a node is missing, naming the cause (rule missing, block rule, IT policy ignoring local rules). Why it matters: a blocked Windows PC is silent and one-way (the Pi sees Windows, Windows sees nothing). Until then: a manual step (the same rule by hand, or every firewall profile off). Trigger: a firewall problem at a demo, or a hand-over to someone new to the rig. Deferred (7 Oct 2026).
 - **Configurable "lost / hang" threshold** (default 3 s), via the scenario QoS file: demos that saturate the network on purpose raise it so dropped best-effort heartbeats don't raise false alarms. The agent's hang check already reads the threshold from the heartbeat topic's QoS, so this is configuration, not code. Trigger: the first saturation demo. Deferred (30 Sep 2026).
 
 ## Scope

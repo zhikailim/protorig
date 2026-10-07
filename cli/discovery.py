@@ -18,10 +18,14 @@ will load the same file, so every language discovers the same way.
 
 Multicast discovery is off in both: the rig uses unicast peers only, so
 switch settings (IGMP snooping) can't break discovery.
+
+Also here: which node this machine is (U13, from its IP) and whether this
+machine fits the node's os:/arch: (U5). Shared by `run` and, later, `agent`.
 """
 from __future__ import annotations
 
 import ipaddress
+import platform
 import socket
 from xml.sax.saxutils import escape
 
@@ -100,3 +104,66 @@ def is_local_ip(ip: str) -> bool:
         return True
     except (OSError, ValueError, TypeError, OverflowError):
         return False
+
+
+
+# ------------------------------------------------------------------ which node am I? (U13, U5)
+
+# scenario.yaml's words for what Python's platform module reports. Windows says
+# AMD64 or ARM64, Linux x86_64 or aarch64, a 32-bit Raspberry Pi OS armv7l.
+OS_NAMES = {"linux": "linux", "windows": "windows", "qnx": "qnx", "android": "android"}
+ARCH_NAMES = {"x86_64": "x86_64", "amd64": "x86_64", "x64": "x86_64",
+              "aarch64": "aarch64", "arm64": "aarch64", "armv7l": "armv7", "armv7": "armv7"}
+DEFAULT_ARCH = "x86_64"      # what scenario.yaml means when a node gives no arch: (as in `protorig check`)
+
+
+class NodeError(Exception):
+    """This machine can't be matched to a node; the message says what to do."""
+
+
+def machine_kind(system: str, machine: str) -> tuple[str, str]:
+    """(os, arch) in scenario.yaml's words, from platform.system() and platform.machine().
+    Unknown names pass through lowercased, so they simply match no node."""
+    s, m = str(system).strip().lower(), str(machine).strip().lower()
+    return OS_NAMES.get(s, s), ARCH_NAMES.get(m, m)
+
+
+def this_machine() -> tuple[str, str]:
+    """This machine's (os, arch), e.g. ("windows", "x86_64")."""
+    return machine_kind(platform.system(), platform.machine())
+
+
+def find_node(nodes: dict, is_local=is_local_ip) -> str:
+    """U13: the one managed node whose ip: this machine has. External nodes never
+    count (nothing runs there). None or several: NodeError, saying what to do."""
+    managed = {n: s for n, s in nodes.items() if isinstance(s, dict) and not s.get("external")}
+    mine = [n for n, s in managed.items() if is_local(str(s.get("ip", "")))]
+    if len(mine) == 1:
+        return mine[0]
+    if not mine:
+        listing = ", ".join(f"{n} {s.get('ip', '(no ip)')}" for n, s in managed.items()) or "none"
+        raise NodeError(f"this machine has none of its managed nodes' IPs ({listing}). Run this on one of "
+                        "those machines, fix the ip: lines in scenario.yaml (the same file on every "
+                        "machine), or use --sim on a single PC.")
+    listing = ", ".join(f"{n} {managed[n].get('ip')}" for n in mine)
+    raise NodeError(f"this machine has the IPs of several nodes ({listing}). "
+                    "Name the one you mean: --node <node>.")
+
+
+def kind_mismatch(node: str, spec: dict, machine: tuple[str, str] | None = None) -> str:
+    """U5: "" if this machine fits the node's os: and arch:, else why not.
+    Catches an IP that moved to another machine (e.g. DHCP gave the VM the Pi's
+    address), which would otherwise run the wrong node's apps, silently."""
+    os_, arch = machine or this_machine()
+    problems = []
+    want_os = spec.get("os")
+    if want_os is not None and str(want_os).strip().lower() != os_:
+        problems.append(f"os: {want_os} but this machine is {os_}")
+    want_arch = spec.get("arch", DEFAULT_ARCH)
+    if str(want_arch).strip().lower() != arch:
+        given = "" if "arch" in spec else " (none given, so x86_64 is assumed)"
+        problems.append(f"arch: {want_arch}{given} but this machine is {arch}")
+    if not problems:
+        return ""
+    return (f"node '{node}' has {'; '.join(problems)}. Its IP may now belong to another machine "
+            "(give the rig fixed IPs), or fix os:/arch: in scenario.yaml.")

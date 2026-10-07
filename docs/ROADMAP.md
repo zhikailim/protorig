@@ -3,7 +3,8 @@
 The one list of work still to do. One line per item; the detail lives where
 "Detail" points.
 
-- **Priority** = row order. Move a row up or down to change it.
+- **Priority** = row order. Move a row up or down to change it. The `#` is
+  a fixed id, so "row 7" keeps meaning the same item.
 - **Work on the next one:** take the top row whose state isn't "Waits".
 - **Done:** move the row to "Done" at the bottom, with the date.
 - **New idea:** add a row here first; write its detail later.
@@ -20,8 +21,7 @@ Status: 7 Oct 2026.
 
 | # | Item | What it gives | State | Detail |
 |---|---|---|---|---|
-| 1 | Node found from the machine's IP | Same command on every machine; no node names to remember | Ready | run.md U4, U5, U13 |
-| 2 | `protorig agent start\|stop\|status` (step 3b) | One agent per machine, started and stopped by hand; status of the whole rig. Write the stop mechanism into N1 first | Approved | node_agent.md N1 |
+| 2 | `protorig agent start\|stop\|status` (step 3b) | One agent per machine, started and stopped by hand; status of the whole rig. Write the stop mechanism into N1 first; reuses the node detection | Ready | node_agent.md N1 |
 | 3 | `run --sim` through agents; `run --live` (step 4) | Rehearsal and the real rig work the same way; one command brings the rig up | Approved | run.md U2, U11, U12; node_agent.md N2 |
 | 4 | `check` rules (step 5) | Catches variants that would cut off default peers (V8), `node_agent` in `run:`, an app twice on a node, app names over 26 characters. Makes `Variant.Alert.BestEffort` reader-only; removes `node_agent` from temperature-skeleton | Approved | node_agent.md N2, N13 V8 |
 
@@ -74,6 +74,7 @@ Status: 7 Oct 2026.
 
 ## Done
 
-- 7 Oct 2026: step 3a, the node agent (B1-B27); design for finding the node from the machine's IP (U13).
+- 7 Oct 2026: `run <scenario>` finds this machine's node from its IP and checks its os/arch (U4, U5, U13; row 1).
+- 7 Oct 2026: step 3a, the node agent (B1-B27).
 - 5 Oct 2026: steps 1 and 2: fw.App obeys only parameters, launcher watch, `_sys/AppState`.
 - Before: `check`, `list`, `new`, `test`, `lock`, `run` (`--app`, `--sim`, `--node`), `tc397_twin`, data contract, QoS, Python `fw`.

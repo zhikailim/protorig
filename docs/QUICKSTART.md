@@ -264,10 +264,10 @@ No data from an external device
 Until agents and `--live` are built, bring the rig up by hand, one command
 per machine:
 
-    protorig run <scenario> --node <this machine's node>
+    protorig run <scenario>
 
-Planned: `protorig run <scenario>`, the node found from this machine's IP
-as in step 7.
+the same line on every machine: it finds this machine's node from its IP
+and says so (`this machine is hpc-pi (172.23.100.121)`).
 
 It starts that machine's apps directly (same wrong-machine check and
 discovery settings), shows their output with a `node/app` prefix, and

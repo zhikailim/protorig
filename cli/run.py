@@ -1,10 +1,11 @@
 """
-run.py — `protorig run`: start a scenario, one node of it, or one app (U1-U10).
+run.py — `protorig run`: start a scenario, one node of it, or one app (U1-U13).
 
     protorig run [--scenario S] [--domain N] --app <app> [its own arguments]
                                                  one app on this machine, to try it (U1)
     protorig run <scenario> --sim                whole scenario on this machine, twins included (U2, U3)
-    protorig run <scenario> --node <node>        this machine's part of the real rig (U4, U5)
+    protorig run <scenario> [--node <node>]      this machine's part of the real rig (U4, U5):
+                                                 the node is found from this machine's IP (U13)
     add --dry-run to see what would start, --domain N to override the domain
 
 Every app is run by fw.supervise.Supervised, the same code the tests use (U7):
@@ -102,9 +103,16 @@ def plan_sim(scenario: str, data: dict) -> list[Launch]:
     return plan
 
 
-def plan_node(scenario: str, data: dict, node: str) -> list[Launch]:
-    """U4/U5: this node's apps, after checking this machine really is that node."""
+def this_node(scenario: str, data: dict, node: str | None = None) -> str:
+    """U4/U5/U13: the node this machine is, named with --node or found from its IP,
+    and refused unless this machine really is it (IP, os, arch)."""
     nodes = data["nodes"]
+    if node is None:
+        try:
+            node = discovery.find_node(nodes)
+        except discovery.NodeError as e:
+            raise RunError(f"scenario '{scenario}': {e}") from None
+        print(f"protorig run: this machine is {node} ({nodes[node].get('ip')})")
     if node not in nodes:
         raise RunError(f"scenario '{scenario}' has no node '{node}' (nodes: {', '.join(nodes)})")
     spec = nodes[node]
@@ -116,7 +124,15 @@ def plan_node(scenario: str, data: dict, node: str) -> list[Launch]:
         raise RunError(f"this machine doesn't have {ip}, the IP scenario '{scenario}' gives node '{node}'. "
                        "Run this on that machine, or fix the IP in scenario.yaml. (Starting anyway would "
                        "discover nothing, silently.)")
-    return [resolve(scenario, app, node, args) for app, args in entries(spec, node)]
+    why = discovery.kind_mismatch(node, spec)
+    if why:
+        raise RunError(f"scenario '{scenario}': {why}")
+    return node
+
+
+def plan_node(scenario: str, data: dict, node: str) -> list[Launch]:
+    """U4: the apps of a node already confirmed by this_node()."""
+    return [resolve(scenario, app, node, args) for app, args in entries(data["nodes"][node], node)]
 
 
 # ------------------------------------------------------------------ running
@@ -229,15 +245,14 @@ def main(args, extra: list[str], app_args: list[str] | None = None) -> int:
 
 
 def _main(args, extra: list[str], app_args: list[str]) -> int:
-    modes = sum(bool(x) for x in (args.app, args.sim, args.node))
-    if modes != 1:
-        raise RunError("choose one: --app <app>, <scenario> --sim, or <scenario> --node <node>")
-    if args.app and args.sim:
-        raise RunError("--app runs one app; --sim runs a scenario")
+    choose = ("choose one: --app <app>, <scenario> --sim, or <scenario> alone "
+              "(this machine's part of the rig, found from its IP)")
+    if sum(bool(x) for x in (args.app, args.sim, args.node)) > 1:
+        raise RunError(choose)
     if extra:
         raise RunError(f"unknown argument(s): {' '.join(extra)} (run's options go before --app <name>)")
-    if (args.sim or args.node) and not args.scenario:
-        raise RunError("which scenario? e.g. protorig run my-demo --sim")
+    if not args.app and not args.scenario:
+        raise RunError("which scenario? e.g. protorig run my-demo --sim" if (args.sim or args.node) else choose)
 
     common: list[str] = []
     env = dict(os.environ)
@@ -261,11 +276,12 @@ def _main(args, extra: list[str], app_args: list[str]) -> int:
             settings_text = discovery.sim_qos()
             settings_path = repo.ROOT / "build" / args.scenario / "_sim" / "node_qos.xml"
             what = f"{args.scenario} --sim (this machine only)"
-        else:                                                          # U4, U5
-            plan = plan_node(args.scenario, data, args.node)
-            settings_text = discovery.node_qos(data["nodes"], args.node)
-            settings_path = repo.ROOT / "build" / args.scenario / args.node / "node_qos.xml"
-            what = f"{args.scenario} --node {args.node}"
+        else:                                                          # U4, U5, U13
+            node = this_node(args.scenario, data, args.node)
+            plan = plan_node(args.scenario, data, node)
+            settings_text = discovery.node_qos(data["nodes"], node)
+            settings_path = repo.ROOT / "build" / args.scenario / node / "node_qos.xml"
+            what = f"{args.scenario} --node {node}"
     if args.domain is not None:
         common += ["--domain", str(args.domain)]
 

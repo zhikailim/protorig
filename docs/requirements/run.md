@@ -7,7 +7,8 @@ Status (30 Sep 2026):
 - U11 (--live): moved here from node_agent (N9); approved 30 Sep 2026, not built.
 - U12 (where --live runs): moved here from node_agent (N10); approved 5 Oct 2026, not built.
 - U4, U5, U12 (changed) and U13 (which node is this machine): approved
-  7 Oct 2026, not built. `--node` becomes optional: the node is found from
+  7 Oct 2026. U4, U5 and U13 built and tested 7 Oct 2026 (U12 comes with
+  --live). `--node` becomes optional: the node is found from
   this machine's IP, so whoever runs the demo needs only the scenario name.
 - U7 (restart rules): changed by node_agent N13/N14 (approved): `run`
   does no variant switching (only agents do); the note protocol is removed.
@@ -40,7 +41,7 @@ U3. `--sim` stays on this machine: nothing reaches the network, so a sim run
 U4. `protorig run <scenario> --node <node>` starts only that node's apps.
     It first writes that node's discovery settings from scenario.yaml: the
     other nodes' IPs as initial peers, DDS restricted to this node's own IP.
-    CHANGED 7 Oct 2026, approved, not built: `--node` is optional.
+    CHANGED 7 Oct 2026, approved, built: `--node` is optional.
     `protorig run <scenario>` starts this machine's part of the rig, the node
     found by U13. `--node <node>` still names it (needed only on a machine
     that has the IPs of two nodes). The same command then works on every
@@ -49,7 +50,7 @@ U4. `protorig run <scenario> --node <node>` starts only that node's apps.
 U5. Wrong-machine guard: if this machine doesn't have the node's IP, `run`
     refuses with a clear message. External nodes and unknown node names are
     refused too.
-    ADDED 7 Oct 2026, approved, not built: the node's `os:` and `arch:` must
+    ADDED 7 Oct 2026, approved, built: the node's `os:` and `arch:` must
     match this machine too (`arch:` is x86_64 when not given, as in
     `check`; Windows' AMD64 counts as x86_64, ARM64 as aarch64, armv7l as
     armv7); otherwise refuse, naming both. Why: an IP that moved to another
@@ -157,7 +158,7 @@ U12. [approved 5 Oct 2026, not built; CHANGED 7 Oct 2026, approved]
 
 ## Which node is this machine? (7 Oct 2026)
 
-U13. [approved 7 Oct 2026, not built]
+U13. [approved 7 Oct 2026; built 7 Oct 2026 for `run`, in cli/discovery.py]
      One rule, used by `run <scenario>` (U4), `run --live` (U12) and
      `agent start|stop` (node_agent N1):
      - Candidates: the scenario's managed nodes (not `external: true`)

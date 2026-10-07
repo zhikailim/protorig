@@ -228,7 +228,7 @@ Launchers find the repo's Python environment and the Connext license, then hand 
 | `./protorig check <scenario>` | Validates YAML, language policy, data contract, and flash locks |
 | `./protorig build [<app>]` | Generates types with rtiddsgen and builds the C/C++ apps for this machine |
 | `./protorig run <scenario> --sim` | Whole scenario on one machine, with twins for external nodes; nothing reaches the network |
-| `./protorig run <scenario> --node <node>` | Only that node's apps, run on that node's machine (planned: `--node` optional, the node found from this machine's IP, run.md U13) |
+| `./protorig run <scenario> [--node <node>]` | This machine's part of the rig: the node found from this machine's IP (run.md U13), or named with `--node` |
 | `./protorig preflight <scenario>` | Every real node up and discovered? |
 | `./protorig new app\|scenario <name>` | Create from a template (`--kind`, `--desc`, `--scenario`) |
 | `./protorig lock <external> [--add IDL] [--dry-run]` | Record the IDL fingerprints of what was just flashed |
@@ -247,7 +247,7 @@ The numbered requirements (U1–U13, with status) are in [requirements/run.md](r
 | Mode | Starts | Discovery settings it generates |
 |---|---|---|
 | `--sim` | every node's apps on this machine, plus each external node's `sim:` twin; each app gets its node's name (`--node hpc-pi`) | shared memory only: nothing reaches the network, so a sim run on domain 0 can't mix with the real rig; Admin Console on the same PC still sees it |
-| `--node <node>` | that node's apps; refuses unless this machine really has the node's IP (starting anyway would silently discover nothing). Planned (U13): `--node` optional, the node found from this machine's IP, and its `os:`/`arch:` checked too | every other node's IP as a unicast peer (`N@`, N = its apps + 1, at least 4), DDS bound to this node's own IP (the known-good profile's lesson), no multicast |
+| `<scenario>` alone, or `--node <node>` | this machine's node's apps: the one node whose IP this machine has (U13), or the one named; refuses unless this machine has the node's IP, os and arch (starting anyway would silently discover nothing) | every other node's IP as a unicast peer (`N@`, N = its apps + 1, at least 4), DDS bound to this node's own IP (the known-good profile's lesson), no multicast |
 | `--app <app>` | one app, node name `local` | none: Connext defaults |
 
 - Apps that don't exist yet, or C/C++ apps not built yet, are listed and skipped: build and run incrementally.
@@ -330,7 +330,7 @@ Built: `app_py/` (used for both tooling apps and sim twins: they're the same Pyt
 7. Try it alone: `./protorig run --app <name>`, watch with `rtiddsspy`, poke it with `./protorig send <Topic> '<json>'`.
 8. Automated test next to the app, including fuzzing: `./protorig test <name>`.
 9. Add it to a scenario's `run:` and `./protorig run <scenario> --sim`.
-10. On hardware: `git pull`, `./protorig build`, `./protorig run <scenario> --node <node>` (planned: just `./protorig run <scenario>`, the same on every machine).
+10. On hardware: `git pull`, `./protorig build`, `./protorig run <scenario>` (the same on every machine).
 
 ---
 

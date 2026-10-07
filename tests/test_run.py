@@ -1,10 +1,10 @@
 """
-test_run.py — `protorig run` (requirements U1-U10 and decisions 1-3; see docs/WORKFLOW.md).
+test_run.py — `protorig run` (requirements U1-U13 and decisions 1-3; see docs/WORKFLOW.md).
 
 Every test works on a copy of the repo whose only scenario is a sample built
 here, so no test depends on a real demo's name or contents:
 
-    desk  127.0.0.1   (a real address of this machine)  runs probe, "probe --label 'two words'"-style args
+    desk  127.0.0.1   (a real address of this machine, with this machine's os/arch)  runs probe, "probe --label 'two words'"-style args
     hpc   203.0.113.9 (a documentation-only address, never local)  runs crasher, a missing app, a C++ app
     ecu   external, sim: tc397_twin (the real twin, copied with the repo)
 
@@ -32,12 +32,14 @@ import discovery  # noqa: E402
 
 SAMPLE = "sample-scenario"
 NOT_LOCAL = "203.0.113.9"      # TEST-NET-3: reserved for documentation, never on a real machine
+MY_OS, MY_ARCH = discovery.this_machine()      # so desk fits whichever machine runs the tests (U5)
+OTHER_OS = "windows" if MY_OS != "windows" else "linux"
 
 SCENARIO = {
     "description": "sample for protorig run tests",
     "domain": 0,
     "nodes": {
-        "desk": {"ip": "127.0.0.1", "os": "linux", "run": ["probe --label 'two words'"]},
+        "desk": {"ip": "127.0.0.1", "os": MY_OS, "arch": MY_ARCH, "run": ["probe --label 'two words'"]},
         "hpc": {"ip": NOT_LOCAL, "os": "linux", "run": ["crasher", "missing_app", "cpp_thing"]},
         "ecu": {"ip": "203.0.113.10", "external": True, "sim": "tc397_twin"},
     },
@@ -163,7 +165,9 @@ def test_domain_override(rig):
     ([SAMPLE, "--node", "ecu"], "is an external node"),
     ([SAMPLE, "--node", "nope"], "has no node 'nope'"),
     (["no-such-scenario", "--sim"], "no scenario 'no-such-scenario'"),
-    ([SAMPLE], "choose one"),
+    ([], "choose one"),
+    ([SAMPLE, "--node", "desk", "--app", "probe"], "choose one"),
+    (["--node", "desk"], "which scenario?"),
     ([SAMPLE, "--sim", "--node", "desk"], "choose one"),
     (["--sim"], "which scenario?"),
     ([SAMPLE, "--sim", "--bogus"], "unknown argument"),
@@ -182,6 +186,141 @@ def test_refusals(rig, args, expected):
 def test_node_run_writes_nothing_when_refused(rig):
     protorig(rig, "run", SAMPLE, "--node", "hpc")
     assert not (rig / "build" / SAMPLE / "hpc").exists()
+
+
+# --- U13 and U5: the node found from this machine's IP, and os/arch checked ----------
+
+def _scenario(rig, **changes):
+    """Rewrite the sample scenario with some nodes replaced (None removes one)."""
+    nodes = {**SCENARIO["nodes"], **changes}
+    data = {**SCENARIO, "nodes": {k: v for k, v in nodes.items() if v is not None}}
+    (rig / "scenarios" / SAMPLE / "scenario.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
+
+
+def test_scenario_alone_finds_this_machines_node(rig):
+    """U4/U13: no --node needed; the one node with this machine's IP is used, and said."""
+    out = protorig(rig, "run", SAMPLE, "--dry-run")
+    assert out.returncode == 0, out.stdout + out.stderr
+    o = out.stdout
+    assert "this machine is desk (127.0.0.1)" in o
+    assert "would start 1 app(s)" in o and "desk/probe" in o and "hpc/" not in o and "ecu/" not in o
+    assert "<element>127.0.0.1</element>" in o                  # the same settings as --node desk
+
+
+def test_external_node_with_this_machines_ip_is_never_chosen(rig):
+    """External nodes run nothing from the repo, so they never count as "this machine"."""
+    _scenario(rig, ecu={"ip": "127.0.0.1", "external": True, "sim": "tc397_twin"},
+              desk={**SCENARIO["nodes"]["desk"], "ip": "127.0.0.2" if os.name != "nt" else "203.0.113.11"})
+    out = protorig(rig, "run", SAMPLE, "--dry-run")
+    if os.name != "nt" and discovery.is_local_ip("127.0.0.2"):
+        assert "this machine is desk" in out.stdout, out.stdout
+    else:
+        assert "has none of its managed nodes' IPs" in out.stdout, out.stdout
+    assert "this machine is ecu" not in out.stdout
+
+
+def test_no_node_has_this_machines_ip(rig):
+    _scenario(rig, desk={**SCENARIO["nodes"]["desk"], "ip": "203.0.113.11"})
+    out = protorig(rig, "run", SAMPLE)
+    o = out.stdout
+    assert out.returncode == 1 and "Traceback" not in o + out.stderr, o + out.stderr
+    assert "has none of its managed nodes' IPs (desk 203.0.113.11, hpc 203.0.113.9)" in o, o
+    assert "use --sim on a single PC" in o and "ecu" not in o
+    assert not (rig / "build").exists(), "a refused run must write nothing"
+
+
+def test_two_nodes_with_this_machines_ip_must_be_named(rig):
+    _scenario(rig, desk2={**SCENARIO["nodes"]["desk"]})
+    out = protorig(rig, "run", SAMPLE, "--dry-run")
+    assert out.returncode == 1, out.stdout
+    assert "the IPs of several nodes (desk 127.0.0.1, desk2 127.0.0.1)" in out.stdout and "--node <node>" in out.stdout
+    named = protorig(rig, "run", SAMPLE, "--node", "desk2", "--dry-run")
+    assert named.returncode == 0 and "desk2/probe" in named.stdout, named.stdout
+    assert "this machine is" not in named.stdout              # named, not searched
+
+
+@pytest.mark.parametrize("node_args", [[], ["--node", "desk"]])
+def test_wrong_os_is_refused(rig, node_args):
+    """U5: the IP matches but the machine doesn't (e.g. an address that moved to another box)."""
+    _scenario(rig, desk={**SCENARIO["nodes"]["desk"], "os": OTHER_OS})
+    out = protorig(rig, "run", SAMPLE, *node_args, "--dry-run")
+    assert out.returncode == 1, out.stdout
+    assert f"node 'desk' has os: {OTHER_OS} but this machine is {MY_OS}" in out.stdout
+    assert "IP may now belong to another machine" in out.stdout and "would start" not in out.stdout
+
+
+def test_wrong_arch_is_refused(rig):
+    other = "armv7" if MY_ARCH != "armv7" else "x86_64"
+    _scenario(rig, desk={**SCENARIO["nodes"]["desk"], "arch": other})
+    out = protorig(rig, "run", SAMPLE, "--node", "desk", "--dry-run")
+    assert out.returncode == 1 and f"arch: {other} but this machine is {MY_ARCH}" in out.stdout, out.stdout
+
+
+# The same rules as pure functions, with the machine and its addresses injected,
+# so every case runs on any machine.
+
+@pytest.mark.parametrize("system,machine,expected", [
+    ("Windows", "AMD64", ("windows", "x86_64")),
+    ("Windows", "ARM64", ("windows", "aarch64")),
+    ("Linux", "x86_64", ("linux", "x86_64")),
+    ("Linux", "aarch64", ("linux", "aarch64")),         # 64-bit Raspberry Pi OS
+    ("Linux", "armv7l", ("linux", "armv7")),            # 32-bit Raspberry Pi OS
+    ("QNX", "x86_64", ("qnx", "x86_64")),
+    (" LINUX ", "X86_64\n", ("linux", "x86_64")),
+    ("Darwin", "arm64", ("darwin", "aarch64")),         # not a rig OS: matches no node
+    ("", "", ("", "")),
+])
+def test_machine_names_map_to_scenario_words(system, machine, expected):
+    assert discovery.machine_kind(system, machine) == expected
+
+
+MINE = {"10.0.0.1", "10.0.0.2"}
+local = MINE.__contains__
+
+
+def test_find_node_rules():
+    nodes = {"pc": {"ip": "10.0.0.1"}, "pi": {"ip": "10.0.0.9"}, "ecu": {"ip": "10.0.0.2", "external": True}}
+    assert discovery.find_node(nodes, local) == "pc"
+    with pytest.raises(discovery.NodeError, match=r"none of its managed nodes' IPs \(pi 10.0.0.9\)"):
+        discovery.find_node({"pi": nodes["pi"], "ecu": nodes["ecu"]}, local)
+    with pytest.raises(discovery.NodeError, match=r"several nodes \(pc 10.0.0.1, vm 10.0.0.2\)"):
+        discovery.find_node({**nodes, "vm": {"ip": "10.0.0.2"}}, local)
+    with pytest.raises(discovery.NodeError, match="none"):
+        discovery.find_node({}, local)
+
+
+@pytest.mark.parametrize("spec,machine,expected", [
+    ({"os": "linux", "arch": "aarch64"}, ("linux", "aarch64"), ""),
+    ({"os": "linux"}, ("linux", "x86_64"), ""),                          # no arch: means x86_64
+    ({"os": "linux"}, ("linux", "aarch64"), "none given, so x86_64 is assumed"),
+    ({"os": "windows"}, ("linux", "x86_64"), "os: windows but this machine is linux"),
+    ({"arch": "aarch64"}, ("windows", "x86_64"), "arch: aarch64 but this machine is x86_64"),   # no os: only arch checked
+    ({"os": "linux", "arch": "aarch64"}, ("windows", "x86_64"), "os: linux but this machine is windows; arch: aarch64"),
+    ({"os": ["x"], "arch": 5}, ("linux", "x86_64"), "os: ['x'] but"),    # junk never crashes
+])
+def test_kind_mismatch_rules(spec, machine, expected):
+    why = discovery.kind_mismatch("n", spec, machine)
+    assert (why == "") if expected == "" else (expected in why), why
+
+
+def test_fuzz_find_node_and_kind_mismatch():
+    """Random node tables: find_node returns a managed node with a local IP or
+    raises NodeError; kind_mismatch always returns text. Never anything else."""
+    rnd = random.Random(13)
+    values = ["10.0.0.1", "10.0.0.2", "10.0.0.9", "", None, 7, ["10.0.0.1"], "linux", "aarch64", True, {}]
+    for _ in range(3000):
+        nodes = {}
+        for i in range(rnd.randint(0, 5)):
+            spec = {k: rnd.choice(values) for k in rnd.sample(["ip", "os", "arch", "external", "run"], rnd.randint(0, 5))}
+            nodes[f"n{i}"] = spec if rnd.random() > 0.1 else rnd.choice(values)
+        try:
+            got = discovery.find_node(nodes, local)
+            assert isinstance(nodes[got], dict) and not nodes[got].get("external") and str(nodes[got].get("ip")) in MINE
+        except discovery.NodeError:
+            pass
+        for name, spec in nodes.items():
+            if isinstance(spec, dict):
+                assert isinstance(discovery.kind_mismatch(name, spec, (rnd.choice(["linux", "windows"]), "x86_64")), str)
 
 
 # --- the generated discovery settings are valid for real Connext ------------------------
@@ -310,11 +449,13 @@ GARBAGE = [
     "nodes: {a: {ip: 127.0.0.1, run: ['x \"unclosed']}}\n", "nodes: [unclosed\n", "\x00\x01\x02",
     "nodes: {a: {external: true}}\n", "nodes: {a: {ip: 127.0.0.1, run: [null, 7, '']}}\n",
     "nodes: {a: {ip: [1, 2], run: [probe]}}\n", "domain: x\nnodes: {a: {ip: 127.0.0.1}}\n",
+    "nodes: {a: {ip: 127.0.0.1, os: [1], arch: 5, run: [probe]}}\n", "nodes: {a: {ip: 127.0.0.1, os: null}}\n",
+    "nodes: {a: {ip: 127.0.0.1}, b: {ip: 127.0.0.1}}\n", "nodes: {a: {ip: 127.0.0.1, external: true}}\n",
 ]
 
 
 @pytest.mark.parametrize("text", GARBAGE)
-@pytest.mark.parametrize("mode", [["--sim"], ["--node", "a"]])
+@pytest.mark.parametrize("mode", [["--sim"], ["--node", "a"], []])
 def test_fuzz_scenario_files(rig, text, mode):
     (rig / "scenarios" / SAMPLE / "scenario.yaml").write_text(text, encoding="utf-8")
     out = protorig(rig, "run", SAMPLE, *mode, "--dry-run")
@@ -323,7 +464,7 @@ def test_fuzz_scenario_files(rig, text, mode):
 
 def test_fuzz_arguments(rig):
     rnd = random.Random(11)
-    words = [SAMPLE, "--sim", "--node", "desk", "hpc", "--app", "probe", "--domain", "7", "-1", "x",
+    words = [SAMPLE, SAMPLE, "--sim", "--node", "desk", "hpc", "--app", "probe", "--domain", "7", "-1", "x",
              "--dry-run", "--scenario", "", "--label", "ñ", "--", "--sim=1"]
     for _ in range(60):
         args = [rnd.choice(words) for _ in range(rnd.randint(0, 6))]

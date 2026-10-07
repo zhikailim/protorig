@@ -64,15 +64,16 @@ def main(argv=None) -> int:
     ts = sub.add_parser("test", help="Run check, then the automated tests (all, or named apps)")
     ts.add_argument("apps", nargs="*", help="only these apps' tests")
     ts.add_argument("-k", help="only tests whose name matches this expression")
-    rn = sub.add_parser("run", help="Run a scenario (--sim, or --node <node>) or one app (--app)",
+    rn = sub.add_parser("run", help="Run a scenario (--sim), this machine's part of it, or one app (--app)",
                         description="Start a scenario on this machine (--sim), this machine's part of the "
-                                    "real rig (--node), or one app: run's options first, then --app <name>, "
+                                    "real rig (just the scenario: the node is found from this machine's IP), "
+                                    "or one app: run's options first, then --app <name>, "
                                     "then the app's own arguments, e.g. "
                                     "protorig run --domain 5 --app my_gui --threshold 14.5. Ctrl-C stops everything.")
-    rn.add_argument("scenario_name", nargs="?", metavar="scenario", help="the scenario (for --sim and --node)")
+    rn.add_argument("scenario_name", nargs="?", metavar="scenario", help="the scenario (alone: this machine's part of it)")
     rn.add_argument("--sim", action="store_true", help="the whole scenario on this machine, twins for external nodes; "
                                                        "nothing reaches the network")
-    rn.add_argument("--node", help="only this node's apps; run it on that node's machine")
+    rn.add_argument("--node", help="name the node yourself (only needed on a machine with the IPs of two nodes)")
     rn.add_argument("--app", help="just this app; everything after its name goes to the app")
     rn.add_argument("--scenario", dest="scenario_opt", metavar="SCENARIO", help="with --app: use this scenario's domain")
     rn.add_argument("--domain", type=int, help="override the DDS domain")

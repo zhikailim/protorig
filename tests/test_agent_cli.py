@@ -57,20 +57,34 @@ def rig(tmp_path):
                   "far": {"ip": "203.0.113.9", "os": "linux", "run": ["probe"]},
                   "ecu": {"ip": "203.0.113.10", "external": True}}}), encoding="utf-8")
     (s / "apps" / "tooling" / "probe" / "main.py").write_text(PROBE, encoding="utf-8")
+    seen.clear()
     yield root
-    # Whatever happened, no agent outlives its test.
-    rec = AgentFiles.of(root, SCEN, "desk").read_pid()
-    if rec and process_alive(rec.pid) and process_started(rec.pid) == rec.started:
-        os.kill(rec.pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+    # Whatever happened (even a second agent overwriting agent.pid when a check is
+    # broken), no agent outlives its test: every one ever named is ended.
+    note(root)
+    for rec in seen:
+        if process_alive(rec.pid) and process_started(rec.pid) == rec.started:
+            os.kill(rec.pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+
+
+seen: list[PidRecord] = []          # every agent the current test started (see the rig fixture)
 
 
 def files(rig) -> AgentFiles:
     return AgentFiles.of(rig, SCEN, "desk")
 
 
+def note(rig) -> None:
+    rec = files(rig).read_pid()
+    if rec is not None and rec not in seen:
+        seen.append(rec)
+
+
 def agent(rig, *args, timeout=60) -> subprocess.CompletedProcess:
+    note(rig)
     out = subprocess.run([sys.executable, str(rig / "cli" / "main.py"), "agent", *args],
                          capture_output=True, text=True, encoding="utf-8", cwd=rig, timeout=timeout)
+    note(rig)
     assert "Traceback" not in out.stdout + out.stderr, out.stdout + out.stderr
     return out
 

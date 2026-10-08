@@ -78,6 +78,16 @@ def main(argv=None) -> int:
     rn.add_argument("--scenario", dest="scenario_opt", metavar="SCENARIO", help="with --app: use this scenario's domain")
     rn.add_argument("--domain", type=int, help="override the DDS domain")
     rn.add_argument("--dry-run", action="store_true", help="show what would start, start nothing")
+    ag = sub.add_parser("agent", help="Start, stop or check the node agents (one per rig machine)",
+                        description="Start or stop this machine's node agent, or check every node's agent. "
+                                    "The node is found from this machine's IP unless --node names it.")
+    ag.add_argument("action", choices=["start", "stop", "status"])
+    ag.add_argument("scenario")
+    ag.add_argument("--node", help="name the node yourself (status: only that node)")
+    ag.add_argument("--background", action="store_true",
+                    help="start: keep running after this terminal closes; returns once the agent is up")
+    ag.add_argument("--force", action="store_true", help="stop: kill the agent at once")
+    ag.add_argument("--domain", type=int, help="override the DDS domain")
     for verb, text in PLANNED.items():
         sub.add_parser(verb, help=f"{text} (not built yet)", add_help=False)
 
@@ -112,6 +122,9 @@ def main(argv=None) -> int:
         import run
         args.scenario = args.scenario_name or args.scenario_opt
         return run.main(args, extra, app_args)
+    if args.verb == "agent":
+        import agent
+        return agent.main(args, extra)
     if args.verb == "lock":
         import lock
         return lock.main(args)

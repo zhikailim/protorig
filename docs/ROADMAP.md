@@ -14,15 +14,14 @@ approved, waits for an earlier row) · **Planned** (designed, requirements not
 written yet) · **Waits** (deferred until its trigger happens) · **Decide**
 (an open decision, usually at bring-up).
 
-Status: 7 Oct 2026.
+Status: 8 Oct 2026.
 
 
 ## 1. Next, in build order
 
 | # | Item | What it gives | State | Detail |
 |---|---|---|---|---|
-| 2 | `protorig agent start\|stop\|status` (step 3b) | One agent per machine, started and stopped by hand; status of the whole rig. Write the stop mechanism into N1 first; reuses the node detection | Ready | node_agent.md N1 |
-| 3 | `run --sim` through agents; `run --live` (step 4) | Rehearsal and the real rig work the same way; one command brings the rig up | Approved | run.md U2, U11, U12; node_agent.md N2 |
+| 3 | `run --sim` through agents; `run --live` (step 4) | Rehearsal and the real rig work the same way; one command brings the rig up | Ready | run.md U2, U11, U12; node_agent.md N2 |
 | 4 | `check` rules (step 5) | Catches variants that would cut off default peers (V8), `node_agent` in `run:`, an app twice on a node, app names over 26 characters. Makes `Variant.Alert.BestEffort` reader-only; removes `node_agent` from temperature-skeleton | Approved | node_agent.md N2, N13 V8 |
 
 
@@ -74,6 +73,7 @@ Status: 7 Oct 2026.
 
 ## Done
 
+- 8 Oct 2026: `protorig agent start|stop|status` (step 3b, row 2): background start, stop through a PID-checked file, status of every node (N1, N1a).
 - 7 Oct 2026: `run <scenario>` finds this machine's node from its IP and checks its os/arch (U4, U5, U13; row 1).
 - 7 Oct 2026: step 3a, the node agent (B1-B27).
 - 5 Oct 2026: steps 1 and 2: fw.App obeys only parameters, launcher watch, `_sys/AppState`.

@@ -1,7 +1,8 @@
 """
 node_agent — starts, stops and kills this machine's apps when asked over DDS,
-and reports their state (node_agent requirements N1-N14; behaviour B1-B27 in
-README.md).
+and reports their state (node_agent requirements N1-N14; behaviour B1-B30 in
+README.md). Started by `protorig agent start`; stopped by Ctrl-C or by
+`protorig agent stop` through build/<scenario>/<node>/agent.stop (N1a).
 
 Topics in : _sys/DemoControl (commands), _sys/NodeStatus (its apps' heartbeats,
             and any other agent claiming this node)
@@ -27,6 +28,7 @@ import rti.connextdds as dds
 from fw.app import App, ROOT, VARIANT_LIBRARY, log
 from fw import scenario as fw_scenario
 from fw import types as T
+from fw.agentfiles import AgentFiles
 from fw.supervise import Supervised
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -36,6 +38,7 @@ BANNER = ("[RTI LICENSE]", "Expires on", "Please contact support@rti.com")   # C
 CONSOLE_LINES = 2000          # app lines waiting to be printed; beyond this they are dropped (N8)
 PUMP_PERIOD = 0.05            # seconds between checks for exits and timeouts
 SCENARIO_CHECK_PERIOD = 2.0
+STOP_CHECK_PERIOD = 1.0       # seconds between looks for agent.stop (N1a step 4)
 
 
 class Console:
@@ -109,6 +112,14 @@ class Agent:
         a.every(PUMP_PERIOD, self.pump)
         a.every(SCENARIO_CHECK_PERIOD, self.check_scenario)
         a.on_stop(self.shutdown)
+        # N1a: agent.pid lets `protorig agent stop` find this process, and
+        # agent.stop is how it asks. Written in the foreground too.
+        self.files = AgentFiles.of(ROOT, a.scenario, a.node)
+        try:
+            self.files.claim()
+        except OSError as e:
+            log(a.who, "WARN", f"couldn't write {self.files.pid_file}: {e} (`protorig agent stop` won't find this agent)")
+        a.every(STOP_CHECK_PERIOD, self.check_stop_request)
         self.console = Console()
         self.procs: dict[str, Supervised] = {}
         self.last_line: dict[str, str] = {}
@@ -208,6 +219,20 @@ class Agent:
             log(self.who, "WARN", f"{self.scenario_file.name} changed: restart the agent to use it "
                                   "(still running the list it started with)")
 
+    def check_stop_request(self) -> None:
+        """B28-B29 (N1a step 4): stop when agent.stop names this process; a
+        request for any other process is a leftover from an earlier agent."""
+        pid = self.files.stop_request()
+        if pid is None:
+            return
+        self.files.clear_stop()
+        if pid == os.getpid():
+            self.app.stop("asked by `protorig agent stop`")
+        elif pid < 0:
+            log(self.who, "WARN", f"ignored an unreadable stop request ({self.files.stop_file.name} held no process ID)")
+        else:
+            log(self.who, "WARN", f"ignored a leftover stop request for process {pid} (this agent is {os.getpid()})")
+
     def _mtime(self):
         try:
             return self.scenario_file.stat().st_mtime_ns
@@ -297,6 +322,7 @@ class Agent:
             except dds.Error:
                 pass
         time.sleep(0.2)                                # let the disposals go out before DDS closes
+        self.files.release()                           # B30: agent.pid and agent.stop gone
 
     def run(self) -> int:
         return self.app.run()

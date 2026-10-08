@@ -4,8 +4,8 @@ One per managed machine. Starts, stops and kills that machine's apps when asked
 over DDS, and reports their state. Requirements: `docs/requirements/node_agent.md`
 (N1-N14). Rig tooling (Python), never shipped in a vehicle.
 
-Run (until `protorig agent` exists, step 3b):
-`python main.py --scenario <scenario> --node <node>`
+Run: `protorig agent start <scenario> [--background]` on the machine
+(N1, N1a). Stop: Ctrl-C, or `protorig agent stop <scenario>`.
 
 ## Arguments
 
@@ -60,5 +60,8 @@ Run (until `protorig agent` exists, step 3b):
 | B25 | an app floods output | | the agent and the app never block; "N lines dropped" shown | N8 |
 | B26 | | Ctrl-C (or a stop request) | every app stopped (grace, then forced); alerts cleared; rows and heartbeat disposed; exit 0 | N8 |
 | B27 | | the agent is killed | its apps stop within about 1 s | N6 |
+| B28 | | it starts | `build/<scenario>/<node>/agent.pid` holds its PID and start time | N1a |
+| B29 | | `agent.stop` appears holding its PID / another PID or junk | stops as B26 / file deleted, logged "ignored a leftover stop request", keeps running | N1a |
+| B30 | | it stops cleanly (B26) | `agent.pid` (if still its own) and `agent.stop` deleted | N1a |
 
-Not here: the `protorig agent` command (N1, step 3b); a display's "agent lost" (N12 rule 1, result_gui).
+Not here: the `protorig agent` command itself (`cli/agent.py`, tested in `tests/test_agent_cli.py`); a display's "agent lost" (N12 rule 1, result_gui).

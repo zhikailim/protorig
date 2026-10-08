@@ -54,7 +54,8 @@ When you open the workspace, VS Code offers to install the recommended extension
 - [x] Python side of `libs/` (`fw.app`, `fw.testing`), Python app and scenario templates, `./protorig new` and `./protorig test`
 - [ ] C++ side of `libs/` (`fw::App`, `fw.cmake`) and the C++ app template
 - [x] `tc397_twin`: the TC397's temperature ramp, requirements R1–R9 from the ECU source
-- [ ] Shared apps: `node_agent`, `result_gui`, `control_panel`
+- [x] `node_agent` and `protorig agent start|stop|status`
+- [ ] Shared apps: `result_gui`, `control_panel`
 - [x] `run`: scenarios on one machine (`--sim`), this machine's rig node (found from its IP), or one app (`--app`)
 - [ ] `bootstrap/`, `build`, `preflight`
 - [ ] Hardware bring-up: VM → TC397 → Pi

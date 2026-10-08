@@ -4,8 +4,10 @@ Status: ALL APPROVED (5 Oct 2026). Built so far (step 1 of 5, 5 Oct 2026): the
 fw.App side of N3 (heartbeat disposed on a clean stop), N6 (launcher watch),
 N11 addition 1 (participant named node/app, Python) and N14; the note protocol
 is removed. Step 3a (5 Oct 2026): the agent itself, N3-N8 and N11-N13, as
-behaviour rows B1-B27 in apps/tooling/node_agent/README.md. Not built yet: the
-`protorig agent` command (N1, step 3b), --sim through agents (N2, step 4).
+behaviour rows B1-B27 in apps/tooling/node_agent/README.md. Step 3b (8 Oct
+2026): the `protorig agent start|stop|status` command (N1, N1a; agent rows
+B28-B30; tests/test_agent_cli.py). Not built yet: --sim through agents (N2,
+step 4).
 - N1-N3, N5-N8: approved in detail.
 - N4: REVISED and approved 30 Sep 2026 (the agent owns the process, the app
   owns its behaviour).
@@ -16,9 +18,8 @@ behaviour rows B1-B27 in apps/tooling/node_agent/README.md. Not built yet: the
 - N14 (what an app obeys): approved 30 Sep 2026.
 - N1 (changed): `--node` optional, the node found from this machine's IP
   (run.md U13); `status` without a node shows every node. Approved 7 Oct
-  2026, not built.
-- N1a (how `--background` start and `stop` work): PROPOSED 7 Oct 2026, for
-  review.
+  2026, built 8 Oct 2026.
+- N1a (how `--background` start and `stop` work): approved 7 Oct 2026, built 8 Oct 2026.
 The bring-up flow these requirements produce is described in
 [../QUICKSTART.md](../QUICKSTART.md).
 
@@ -61,7 +62,7 @@ can be brought up and controlled from one machine.
 - Code: `apps/tooling/node_agent/` (Python on fw.App: rig tooling, never
   shipped in a vehicle); participant `<node>/node_agent`.
 
-## N1a. Background start and stop  [PROPOSED 7 Oct 2026, for review]
+## N1a. Background start and stop  [approved 7 Oct 2026]
 
 Why a file: `stop` must work the same on Windows and Linux, and be testable
 on both. Signals differ (Windows can't send a polite stop to a detached

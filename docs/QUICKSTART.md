@@ -4,7 +4,7 @@ How to take a demo from "machines switched off" to "every app running".
 Written for people new to this rig. The full design is in
 [WORKFLOW.md](WORKFLOW.md).
 
-Status (7 Oct 2026): some commands below are still being built.
+Status (8 Oct 2026): some commands below are still being built.
 Each step is marked:
 
     [available]  works today
@@ -113,7 +113,7 @@ beats behave the same in both.
 6. Switch on each external node (e.g. the TC397). It boots its own
    firmware and starts publishing. Nothing to start from the repo.
 
-### Stage 2: start one agent per managed machine  [planned]
+### Stage 2: start one agent per managed machine  [available]
 
 7. On each managed machine, once, the same line everywhere:
 
@@ -167,15 +167,15 @@ beats behave the same in both.
         stop  <app> or *   polite stop; forced after 10 s if it doesn't stop
         kill  <app> or *   immediate, as if it crashed; the agent stays up
 
-    QoS variant switches and parameter changes go to the apps themselves,
-    not to the agents.
+    A QoS variant switch also goes to the agent (it restarts the app with
+    that variant); a parameter change goes to the app itself.
 
 ### Stage 5: shutting down
 
 16. Press Ctrl-C in the `run --live` window. Every agent stops its apps
     cleanly. The agents stay up, ready for the next `run --live`.
 
-17. To stop an agent as well, on its own machine:
+17. To stop an agent as well, on its own machine  [available]:
 
         protorig agent stop <scenario>
 
@@ -259,10 +259,10 @@ No data from an external device
   See `external/<device>/README.md` (e.g. the TC397's rig risks).
 
 
-## 8. Before agents exist  [available]
+## 8. Before `--live` and the Control Panel exist  [available]
 
-Until agents and `--live` are built, bring the rig up by hand, one command
-per machine:
+The agents run (stage 2), but nothing tells them to start apps yet. Until
+then, bring the rig up by hand, one command per machine, without agents:
 
     protorig run <scenario>
 

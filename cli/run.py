@@ -103,16 +103,17 @@ def plan_sim(scenario: str, data: dict) -> list[Launch]:
     return plan
 
 
-def this_node(scenario: str, data: dict, node: str | None = None) -> str:
+def this_node(scenario: str, data: dict, node: str | None = None, prog: str = "run") -> str:
     """U4/U5/U13: the node this machine is, named with --node or found from its IP,
-    and refused unless this machine really is it (IP, os, arch)."""
+    and refused unless this machine really is it (IP, os, arch). Shared with
+    `protorig agent` (prog names the command in the "this machine is" line)."""
     nodes = data["nodes"]
     if node is None:
         try:
             node = discovery.find_node(nodes)
         except discovery.NodeError as e:
             raise RunError(f"scenario '{scenario}': {e}") from None
-        print(f"protorig run: this machine is {node} ({nodes[node].get('ip')})")
+        print(f"protorig {prog}: this machine is {node} ({nodes[node].get('ip')})", flush=True)
     if node not in nodes:
         raise RunError(f"scenario '{scenario}' has no node '{node}' (nodes: {', '.join(nodes)})")
     spec = nodes[node]

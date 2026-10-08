@@ -21,7 +21,7 @@ Status: 8 Oct 2026.
 
 | # | Item | What it gives | State | Detail |
 |---|---|---|---|---|
-| 3 | `run --sim` through agents; `run --live` (step 4) | Rehearsal and the real rig work the same way; one command brings the rig up | Ready | run.md U2, U11, U12; node_agent.md N2 |
+| 3 | `run --sim` through agents (step 4b) | Rehearsal on one PC works exactly like the rig: the Control Panel's machine-level commands too | Ready | run.md U2; node_agent.md N2 |
 | 4 | `check` rules (step 5) | Catches variants that would cut off default peers (V8), `node_agent` in `run:`, an app twice on a node, app names over 26 characters. Makes `Variant.Alert.BestEffort` reader-only; removes `node_agent` from temperature-skeleton | Approved | node_agent.md N2, N13 V8 |
 
 
@@ -73,6 +73,7 @@ Status: 8 Oct 2026.
 
 ## Done
 
+- 8 Oct 2026: `run <scenario> --live` (step 4a): the whole rig up through its agents with one command (U11, U12); agents skip `node_agent` in `run:` (B31), removed from temperature-skeleton.
 - 8 Oct 2026: `protorig agent start|stop|status` (step 3b, row 2): background start, stop through a PID-checked file, status of every node (N1, N1a).
 - 7 Oct 2026: `run <scenario>` finds this machine's node from its IP and checks its os/arch (U4, U5, U13; row 1).
 - 7 Oct 2026: step 3a, the node agent (B1-B27).

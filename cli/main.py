@@ -82,6 +82,11 @@ def main(argv=None) -> int:
     rn.add_argument("--sim", action="store_true", help="the whole scenario on this machine, twins for external nodes; "
                                                        "nothing reaches the network")
     rn.add_argument("--node", help="name the node yourself (only needed on a machine with the IPs of two nodes)")
+    rn.add_argument("--live", action="store_true",
+                    help="bring the whole rig up through its node agents; Ctrl-C stops every app (agents stay up)")
+    rn.add_argument("--partial", action="store_true", help="with --live: go ahead with whichever agents are there")
+    rn.add_argument("--start-timeout", type=float, metavar="SECONDS",
+                    help="with --live: flag apps not RUNNING after this long (default 20)")
     rn.add_argument("--app", help="just this app; everything after its name goes to the app")
     rn.add_argument("--scenario", dest="scenario_opt", metavar="SCENARIO", help="with --app: use this scenario's domain")
     rn.add_argument("--domain", type=int, help="override the DDS domain")

@@ -246,14 +246,16 @@ def main(args, extra: list[str], app_args: list[str] | None = None) -> int:
 
 
 def _main(args, extra: list[str], app_args: list[str]) -> int:
-    choose = ("choose one: --app <app>, <scenario> --sim, or <scenario> alone "
+    choose = ("choose one: --app <app>, <scenario> --sim, <scenario> --live, or <scenario> alone "
               "(this machine's part of the rig, found from its IP)")
-    if sum(bool(x) for x in (args.app, args.sim, args.node)) > 1:
+    if sum(bool(x) for x in (args.app, args.sim, args.node and not args.live, args.live)) > 1:
         raise RunError(choose)
+    if (args.partial or args.start_timeout is not None) and not args.live:
+        raise RunError("--partial and --start-timeout are for --live")
     if extra:
         raise RunError(f"unknown argument(s): {' '.join(extra)} (run's options go before --app <name>)")
     if not args.app and not args.scenario:
-        raise RunError("which scenario? e.g. protorig run my-demo --sim" if (args.sim or args.node) else choose)
+        raise RunError("which scenario? e.g. protorig run my-demo --sim" if (args.sim or args.node or args.live) else choose)
 
     common: list[str] = []
     env = dict(os.environ)
@@ -261,6 +263,15 @@ def _main(args, extra: list[str], app_args: list[str]) -> int:
     env["PYTHONUNBUFFERED"] = "1"
     env.pop(NODE_QOS_ENV, None)
     settings_text, settings_path = None, None
+
+    if args.live:                                                      # U11, U12
+        if args.dry_run:
+            raise RunError("--dry-run isn't available with --live (it starts nothing itself)")
+        import live
+        args.start_timeout = 20.0 if args.start_timeout is None else args.start_timeout
+        if not 0 < args.start_timeout <= 3600:
+            raise RunError("--start-timeout must be between 0 and 3600 seconds")
+        return live.main(args, load_scenario(args.scenario))
 
     if args.app:                                                       # U1
         scenario = args.scenario

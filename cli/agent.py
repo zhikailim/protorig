@@ -50,6 +50,7 @@ class Listener:
         files = [str(repo.ROOT / "qos" / f) for f in QOS_FILES if (repo.ROOT / "qos" / f).exists()] + [str(settings)]
         prov = dds.QosProvider(";".join(files))
         prov.default_profile = DEFAULT_PROFILE
+        self._prov = prov
         pqos = prov.participant_qos_from_profile(NODE_PROFILE)
         pqos.participant_name.name = name
         self.participant = dds.DomainParticipant(domain, pqos)
@@ -76,9 +77,13 @@ class Listener:
                 latest[d.app] = d
         return [latest[k] for k in sorted(latest)]
 
+    def _entities(self) -> list:
+        """Readers and writers to close before the participant (subclasses add theirs)."""
+        return [self._hb, self._rows]
+
     def close(self) -> None:
         """Readers first, then the participant (the order Connext requires)."""
-        for r in (self._hb, self._rows):
+        for r in self._entities():
             try:
                 r.close()
             except self._dds.Error:
@@ -142,9 +147,10 @@ def without_banner(fn):
                     print(line, flush=True)
 
 
-def open_listener(domain: int, settings, name: str) -> "Listener":
+def open_listener(domain: int, settings, name: str, cls=None) -> "Listener":
+    cls = cls or Listener
     try:
-        return without_banner(lambda: Listener(domain, settings, name))
+        return without_banner(lambda: cls(domain, settings, name))
     except Exception as e:                    # Connext raises several kinds; never a traceback
         raise RunError(f"couldn't join DDS domain {domain}: {type(e).__name__}: {e}") from None
 

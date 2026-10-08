@@ -63,5 +63,6 @@ Run: `protorig agent start <scenario> [--background]` on the machine
 | B28 | | it starts | `build/<scenario>/<node>/agent.pid` holds its PID and start time | N1a |
 | B29 | | `agent.stop` appears holding its PID / another PID or junk | stops as B26 / file deleted, logged "ignored a leftover stop request", keeps running | N1a |
 | B30 | | it stops cleanly (B26) | `agent.pid` (if still its own) and `agent.stop` deleted | N1a |
+| B31 | its node's `run:` lists `node_agent` | it starts | that entry skipped (no row, never started), logged "skipped" | N2 |
 
 Not here: the `protorig agent` command itself (`cli/agent.py`, tested in `tests/test_agent_cli.py`); a display's "agent lost" (N12 rule 1, result_gui).

@@ -141,7 +141,7 @@ beats behave the same in both.
    One line per machine: agent alive or missing, and its apps.
    Add `--node <node>` for one machine only.
 
-### Stage 3: bring the demo up, from one machine  [planned]
+### Stage 3: bring the demo up, from one machine  [available]
 
 10. On any machine in the scenario (usually Windows):
 
@@ -259,10 +259,10 @@ No data from an external device
   See `external/<device>/README.md` (e.g. the TC397's rig risks).
 
 
-## 8. Before `--live` and the Control Panel exist  [available]
+## 8. Without agents  [available]
 
-The agents run (stage 2), but nothing tells them to start apps yet. Until
-then, bring the rig up by hand, one command per machine, without agents:
+To bring the rig up by hand instead (no agents, no `--live`), one command
+per machine:
 
     protorig run <scenario>
 

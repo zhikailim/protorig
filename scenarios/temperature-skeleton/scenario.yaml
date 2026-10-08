@@ -5,8 +5,8 @@ domain: 0            # confirmed from the TC397 source (publisher_main_w_args(0,
 
 nodes:
   windows: { ip: 172.23.100.102, os: windows, run: [result_gui, control_panel, ivi_standin] }
-  hpc-vm:  { ip: 172.23.100.110, os: linux,   run: [node_agent, "hpc_monitor --strength 20"] }
-  hpc-pi:  { ip: 172.23.100.121, os: linux, arch: aarch64, run: [node_agent, "hpc_monitor --strength 10"] }
+  hpc-vm:  { ip: 172.23.100.110, os: linux,   run: ["hpc_monitor --strength 20"] }
+  hpc-pi:  { ip: 172.23.100.121, os: linux, arch: aarch64, run: ["hpc_monitor --strength 10"] }
   tc397:   { ip: 172.23.100.101, external: true, arch: tricore, sim: tc397_twin }
 
 # IPs: tc397 (.101) and windows (.102) are confirmed by the TC397 source.

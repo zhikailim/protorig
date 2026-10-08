@@ -47,8 +47,8 @@ description: HPC failover with over-temperature alerts
 domain: 0
 nodes:
   windows: { ip: 172.23.100.102, os: windows, run: [result_gui, control_panel, ivi_standin] }
-  hpc-vm:  { ip: 172.23.100.110, os: linux,   run: [node_agent, hpc_monitor --strength 20] }
-  hpc-pi:  { ip: 172.23.100.121, os: linux,   run: [node_agent, hpc_monitor --strength 10] }
+  hpc-vm:  { ip: 172.23.100.110, os: linux,   run: ["hpc_monitor --strength 20"] }
+  hpc-pi:  { ip: 172.23.100.121, os: linux,   run: ["hpc_monitor --strength 10"] }
   tc397:   { ip: 172.23.100.101, external: true, sim: tc397_twin }
 ```
 
@@ -96,7 +96,7 @@ Known item: Micro and Cert are configured in code, not by loading QoS XML at run
 - Every app has a `README.md`: what it does, its arguments, topics in and out.
 
 Shared apps used by most scenarios:
-- `node_agent` (C++, runs first on every Linux/QNX node): publishes `NodeStatus` every second and carries out `DemoControl` commands (start, stop or kill apps) on its own machine.
+- `node_agent` (Python tooling, one per managed machine, never listed in `run:`): publishes `NodeStatus` every second and carries out `DemoControl` commands (start, stop or kill apps) on its own machine (node_agent N1-N14).
 - `result_gui` (Python, Windows): the audience's main screen. Listens only: live plots, alert banner, node status board.
 - `control_panel` (Python, Windows): publishes `DemoControl`.
 
@@ -229,6 +229,7 @@ Launchers find the repo's Python environment and the Connext license, then hand 
 | `./protorig build [<app>]` | Generates types with rtiddsgen and builds the C/C++ apps for this machine |
 | `./protorig run <scenario> --sim` | Whole scenario on one machine, with twins for external nodes; nothing reaches the network |
 | `./protorig run <scenario> [--node <node>]` | This machine's part of the rig: the node found from this machine's IP (run.md U13), or named with `--node` |
+| `./protorig run <scenario> --live [--partial]` | The whole rig through its agents, from any machine in the scenario: waits for every agent, starts everything, shows each app's state; Ctrl-C stops every app, the agents stay up (run.md U11, U12) |
 | `./protorig agent start\|stop\|status <scenario>` | Start (`--background` to keep it after the terminal closes) or stop this machine's node agent; `status` shows every node's agent and apps (node_agent N1, N1a) |
 | `./protorig preflight <scenario>` | Every real node up and discovered? |
 | `./protorig new app\|scenario <name>` | Create from a template (`--kind`, `--desc`, `--scenario`) |

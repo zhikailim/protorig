@@ -97,6 +97,9 @@ class Agent:
         except ValueError as e:
             log(a.who, "ERROR", str(e))
             raise SystemExit(2)
+        if any(e.app == "node_agent" for e in entries):          # B31: control.py skips it; say so
+            log(a.who, "WARN", "run: lists node_agent: skipped (every managed node gets its agent "
+                               "automatically; remove it from scenario.yaml)")
         self.cmds = {e.app: e.cmd for e in entries}
         # N7: the hang threshold is the heartbeat topic's own liveliness lease.
         self.s.hang_after = a.provider.get_topic_datareader_qos("_sys/NodeStatus").liveliness.lease_duration.to_seconds()

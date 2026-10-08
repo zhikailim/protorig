@@ -4,8 +4,8 @@ Status (30 Sep 2026):
 - U1-U10 and D1-D3: approved 29 Sep 2026, built and tested.
 - B1-B7: added while building; approved 30 Sep 2026.
 - U2 (changed): approved 30 Sep 2026 as part of node_agent (N2); not built yet.
-- U11 (--live): moved here from node_agent (N9); approved 30 Sep 2026, not built.
-- U12 (where --live runs): moved here from node_agent (N10); approved 5 Oct 2026, not built.
+- U11 (--live): moved here from node_agent (N9); approved 30 Sep 2026, built 8 Oct 2026 (cli/live.py, tests/test_live.py).
+- U12 (where --live runs): moved here from node_agent (N10); approved 5 Oct 2026, built 8 Oct 2026.
 - U4, U5, U12 (changed) and U13 (which node is this machine): approved
   7 Oct 2026. U4, U5 and U13 built and tested 7 Oct 2026 (U12 comes with
   --live). `--node` becomes optional: the node is found from
@@ -114,7 +114,7 @@ B7. U3 was approved as "shared memory and loopback"; it was built as shared
 
 ## --live (moved from node_agent N9, N10)
 
-U11. [approved 30 Sep 2026, not built]
+U11. [approved 30 Sep 2026, built 8 Oct 2026]
      `protorig run <scenario> --live` brings the whole rig up through its
      agents:
      1. Waits for every managed node's agent, printing who is still
@@ -146,7 +146,7 @@ U11. [approved 30 Sep 2026, not built]
        failed; 2 = could not start (agents missing, scenario mismatch,
        wrong machine).
 
-U12. [approved 5 Oct 2026, not built; CHANGED 7 Oct 2026, approved]
+U12. [approved 5 Oct 2026; CHANGED 7 Oct 2026, approved; built 8 Oct 2026]
      `--live` runs from a machine that is in the scenario, found by U13
      (refused: exit 2). Was: several nodes sharing this machine's IP used
      the first; now refused like every other ambiguity (`check` already
@@ -171,3 +171,18 @@ U13. [approved 7 Oct 2026; built 7 Oct 2026 for `run`, in cli/discovery.py]
      - Several: refuse, listing them, and ask for `--node <node>`.
      - Then the U5 checks (os, arch) on the node found.
      `--node <node>` skips the search; U5 still applies.
+
+
+## Added while building --live (8 Oct 2026): for approval
+
+B8. `--start-timeout SECONDS` (default 20): how long `--live` waits before
+    flagging apps that aren't RUNNING (U11 step 4's "within 20 s", made an
+    argument because timings are never hard-coded). `--partial` and
+    `--start-timeout` are refused without `--live`; `--dry-run` is refused
+    with it (it starts nothing itself).
+B9. `--live` sends a start only once the agent's command reader has matched
+    (up to 5 s): the command topic keeps no history, so an earlier command
+    would be lost. The 3 s resend of U11 step 3 stays as the backstop.
+B10. "Some app failed" (exit 1) means: UNAVAILABLE, not RUNNING when
+    --start-timeout passes, CRASHED at any time, or forced at the end. A KILLED
+    app (a demo beat) is not a failure.

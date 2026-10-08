@@ -326,9 +326,11 @@ def status(args, data: dict) -> int:
                 print(f"{n}: agent MISSING (not started, unreachable, or on another domain)")
                 continue
             rows = listener.app_rows(n)
-            apps = ", ".join(f"{r.app} {r.state.name.removeprefix('APP_')}" + (f" ({r.detail})" if r.detail else "")
-                             for r in rows) or "none"
-            print(f"{n}: agent alive; apps: {apps}")
+            print(f"{n}: agent alive" + ("" if rows else "; no apps"))
+            width = max((len(r.app) for r in rows), default=0)       # one app per line, in columns
+            for r in rows:
+                state = r.state.name.removeprefix("APP_")
+                print(f"    {r.app:<{width}}  {state:<11}  {r.detail}".rstrip())
         return 0 if all(n in alive for n in targets) else 1
     finally:
         listener.close()

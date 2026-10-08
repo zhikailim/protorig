@@ -121,7 +121,7 @@ def test_background_start_status_stop(rig, bus):
     d = str(bus.domain)
     st = agent(rig, "status", SCEN, "--domain", d)
     assert st.returncode == 1                                   # far's agent is missing
-    assert "desk: agent alive; apps: probe NOT_RUNNING" in st.stdout, st.stdout
+    assert "desk: agent alive\n    probe  NOT_RUNNING\n" in st.stdout, st.stdout     # one app per line
     assert "far: agent MISSING" in st.stdout and "ecu" not in st.stdout
     assert agent(rig, "status", SCEN, "--node", "desk", "--domain", d).returncode == 0
 

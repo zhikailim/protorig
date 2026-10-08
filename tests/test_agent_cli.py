@@ -311,6 +311,38 @@ def test_force_kill_a_real_agent_and_its_apps_stop(rig, bus):
         hb.close()
 
 
+# --- the agent behind a launcher (a Windows virtual environment's python.exe) ----------
+
+LAUNCHER = """import subprocess, sys
+from pathlib import Path
+# Like a Windows venv's python.exe: a small process that runs the real one as its child.
+sys.exit(subprocess.call([sys.executable, str(Path(__file__).with_name("{target}")), *sys.argv[1:]]))
+"""
+
+
+def behind_a_launcher(rig, target_code: str | None = None) -> None:
+    """main.py becomes a launcher; the agent (or target_code) runs in its child."""
+    folder = rig / "apps" / "tooling" / "node_agent"
+    real = folder / "agent_real.py"
+    if target_code is None:
+        (folder / "main.py").rename(real)
+    else:
+        real.write_text(target_code, encoding="utf-8")
+    (folder / "main.py").write_text(LAUNCHER.format(target=real.name), encoding="utf-8")
+
+
+def test_agent_behind_a_launcher(rig, bus):
+    """The PID that matters is the agent's own (agent.pid), never the launcher's."""
+    behind_a_launcher(rig)
+    out = agent(rig, "start", SCEN, "--background", "--domain", str(bus.domain))
+    assert out.returncode == 0, out.stdout
+    rec = files(rig).read_pid()
+    assert f"is up (process {rec.pid}," in out.stdout, out.stdout
+    stop = agent(rig, "stop", SCEN)
+    assert stop.returncode == 0 and "agent for desk stopped" in stop.stdout, stop.stdout
+    assert not process_alive(rec.pid)
+
+
 # --- start that fails (N1a step 1) ------------------------------------------------------
 
 def test_background_start_reports_an_agent_that_ends_at_once(rig, bus):
@@ -335,9 +367,13 @@ while True:
 '''
 
 
-def test_background_start_gives_up_without_a_heartbeat(rig, bus):
-    (rig / "apps" / "tooling" / "node_agent" / "main.py").write_text(
-        FAKE_AGENT.format(libs=str(rig / "libs" / "py"), root=str(rig), scen=SCEN), encoding="utf-8")
+@pytest.mark.parametrize("launcher", [False, True], ids=["direct", "behind_a_launcher"])
+def test_background_start_gives_up_without_a_heartbeat(rig, bus, launcher):
+    fake = FAKE_AGENT.format(libs=str(rig / "libs" / "py"), root=str(rig), scen=SCEN)
+    if launcher:
+        behind_a_launcher(rig, fake)
+    else:
+        (rig / "apps" / "tooling" / "node_agent" / "main.py").write_text(fake, encoding="utf-8")
     t0 = time.monotonic()
     out = agent(rig, "start", SCEN, "--background", "--domain", str(bus.domain), timeout=90)
     assert out.returncode == 1 and "no heartbeat from the agent within 15 s; stopped it again" in out.stdout, out.stdout

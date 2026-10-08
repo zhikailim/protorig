@@ -108,6 +108,20 @@ def domain_of(args, data: dict) -> int:
 BANNER = ("[RTI LICENSE]", "Expires on", "Please contact support@rti.com")
 
 
+def flush_c_output() -> None:
+    """Flush the C runtime's output buffers (fflush(NULL)). Connext's C core prints
+    through them; on Windows they reach the terminal only at exit otherwise, long
+    after the capture below has ended. Best effort: never fails."""
+    import ctypes
+    names = ("ucrtbase", "msvcrt") if os.name == "nt" else (None,)
+    for name in names:
+        try:
+            lib = ctypes.CDLL(name) if name is None else getattr(ctypes.cdll, name)
+            lib.fflush(None)
+        except (OSError, AttributeError):
+            pass
+
+
 def without_banner(fn):
     """Run fn() with this process's own output captured at the OS level (Connext's
     C core prints straight to it), then pass on everything except Connext's
@@ -119,6 +133,7 @@ def without_banner(fn):
         try:
             return fn()
         finally:
+            flush_c_output()
             os.dup2(saved, 1)
             os.close(saved)
             tmp.seek(0)
@@ -207,26 +222,43 @@ def foreground(cmd: list[str], env: dict, node: str) -> int:
 
 
 def background(cmd: list[str], env: dict, node: str, files: AgentFiles, listener: Listener) -> int:
-    """N1a step 1: return only once the agent's first heartbeat is seen."""
+    """N1a step 1: return only once the agent's first heartbeat is seen.
+
+    The agent's process ID is the one it writes to agent.pid, never Popen's: on
+    Windows a virtual environment's python.exe is a small launcher that starts
+    the real Python as a child, so Popen's ID is the launcher's."""
     with open(files.log_file, "wb") as log_out:
         proc = subprocess.Popen(cmd, env=env, stdin=subprocess.DEVNULL, stdout=log_out,
                                 stderr=subprocess.STDOUT, **detached())
     end = time.monotonic() + UP_TIMEOUT
     while time.monotonic() < end:
         if node in listener.agents():
-            say(f"agent for {node} is up (process {proc.pid}, log: {files.log_file})")
+            rec = files.read_pid()
+            say(f"agent for {node} is up (process {rec.pid if rec else proc.pid}, log: {files.log_file})")
             return 0
         if proc.poll() is not None:
             return failed_start(files, f"the agent ended at once (exit {proc.returncode})")
         time.sleep(POLL)
-    files.request_stop(proc.pid)                                        # not up: take it down again
+    take_down(proc, files)                                              # not up: take it down again
+    return failed_start(files, f"no heartbeat from the agent within {UP_TIMEOUT:g} s; stopped it again")
+
+
+def take_down(proc: subprocess.Popen, files: AgentFiles) -> None:
+    """Stop an agent that never came up: politely through agent.stop if it wrote
+    its PID, else (or if that fails) by force, the launcher included."""
+    rec = files.read_pid()
+    if rec is not None and files.identity(rec) == "agent":
+        files.request_stop(rec.pid)
+        if wait_for(lambda: not process_alive(rec.pid), STOP_GRACE + STOP_EXTRA):
+            files.release(rec.pid)
+        else:
+            kill_process(rec.pid)
+            files.release(rec.pid)
     try:
-        proc.wait(STOP_GRACE + STOP_EXTRA)
+        proc.wait(5)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
-    files.release(proc.pid)
-    return failed_start(files, f"no heartbeat from the agent within {UP_TIMEOUT:g} s; stopped it again")
 
 
 def failed_start(files: AgentFiles, why: str) -> int:

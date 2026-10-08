@@ -46,10 +46,16 @@ def process_started(pid: int) -> int | None:
         k32.GetProcessTimes.argtypes = (wintypes.HANDLE,) + (ctypes.POINTER(wintypes.FILETIME),) * 4
         k32.GetProcessTimes.restype = wintypes.BOOL
         k32.CloseHandle.argtypes = (wintypes.HANDLE,)
-        h = k32.OpenProcess(0x1000, False, pid)          # PROCESS_QUERY_LIMITED_INFORMATION
+        k32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        k32.WaitForSingleObject.restype = wintypes.DWORD
+        h = k32.OpenProcess(0x00100000 | 0x1000, False, pid)    # SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION
         if not h:
             return None
         try:
+            # An ended process stays readable while anyone holds a handle to it:
+            # only a running one (wait times out) counts.
+            if k32.WaitForSingleObject(h, 0) != 0x102:
+                return None
             t = [wintypes.FILETIME() for _ in range(4)]
             if not k32.GetProcessTimes(h, *(ctypes.byref(x) for x in t)):
                 return None

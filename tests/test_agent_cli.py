@@ -424,6 +424,29 @@ def test_garbled_pid_file_never_crashes_stop(rig, content):
         assert "no agent running" in out.stdout and not f.pid_file.exists(), out.stdout
 
 
+# --- the license from .local/ (documented place; tests set RTI_LICENSE_FILE themselves) --
+
+LICENSE_PROBE = "import os; print('LICENSE=' + os.environ.get('RTI_LICENSE_FILE', 'none'))"
+
+
+@pytest.mark.parametrize("given", [False, True])
+def test_license_in_local_reaches_every_started_process(rig, given):
+    """Without RTI_LICENSE_FILE, protorig uses .local/rti_license.dat and passes it on
+    to what it starts; a variable already set always wins."""
+    lic = rig / ".local" / "rti_license.dat"
+    lic.parent.mkdir()
+    lic.write_text("not a real license\n", encoding="utf-8")
+    probe = rig / "scenarios" / SCEN / "apps" / "tooling" / "probe" / "main.py"
+    probe.write_text(LICENSE_PROBE, encoding="utf-8")
+    env = {k: v for k, v in os.environ.items() if k != "RTI_LICENSE_FILE"}
+    if given:
+        env["RTI_LICENSE_FILE"] = "/somewhere/else.dat"
+    out = subprocess.run([sys.executable, str(rig / "cli" / "main.py"), "run", "--scenario", SCEN, "--app", "probe"],
+                         capture_output=True, text=True, encoding="utf-8", cwd=rig, env=env, timeout=60)
+    expected = "/somewhere/else.dat" if given else str(lic)
+    assert f"LICENSE={expected}" in out.stdout, out.stdout + out.stderr
+
+
 # --- fw.agentfiles on its own -----------------------------------------------------------
 
 def test_process_started_is_stable_and_specific():

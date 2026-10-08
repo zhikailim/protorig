@@ -6,10 +6,18 @@ Each verb lives in its own module. Verbs that aren't built yet are listed, so
 `protorig --help` always shows the full planned command set.
 """
 import argparse
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # so `import repo` works
+
+# The Connext license: the repo's .local/rti_license.dat (git-ignored, the documented
+# place) unless RTI_LICENSE_FILE already names one. Exported, so every agent and app
+# that protorig starts finds it too, on every OS.
+_LICENSE = Path(__file__).resolve().parent.parent / ".local" / "rti_license.dat"
+if not os.environ.get("RTI_LICENSE_FILE") and _LICENSE.is_file():
+    os.environ["RTI_LICENSE_FILE"] = str(_LICENSE)
 
 try:
     import yaml  # noqa: F401  (needed by every verb)

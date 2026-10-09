@@ -173,7 +173,7 @@ U13. [approved 7 Oct 2026; built 7 Oct 2026 for `run`, in cli/discovery.py]
      `--node <node>` skips the search; U5 still applies.
 
 
-## Added while building --live (8 Oct 2026): for approval
+## Added while building --live (8 Oct 2026): approved 9 Oct 2026
 
 B8. `--start-timeout SECONDS` (default 20): how long `--live` waits before
     flagging apps that aren't RUNNING (U11 step 4's "within 20 s", made an

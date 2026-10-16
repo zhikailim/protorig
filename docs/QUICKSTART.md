@@ -193,9 +193,10 @@ This does stages 2 and 3, plus the external devices, in one go on one PC:
 Everything stays on your PC. Stage 4 works exactly as on the rig. Ctrl-C
 stops everything, agents included.
 
-Today [available], `--sim` starts the apps directly, without agents: the
-Control Panel's per-app commands work; per-machine commands arrive with the
-agents [planned].
+[available] The agents and twins run on your PC; Ctrl-C stops the apps
+through their agents, then the agents and twins. If you also started rig
+agents for the same scenario on this PC, `--sim` refuses and tells you how
+to stop them first.
 
 
 ## 6. Reading the node board

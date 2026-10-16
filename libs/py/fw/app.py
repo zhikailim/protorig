@@ -58,6 +58,12 @@ from fw import topics as fw_topics
 from fw.supervise import EXIT_KILLED, LAUNCHER_ENV, process_alive
 from fw import types as T
 
+# Every Connext error. They don't share a base: PreconditionNotMetError,
+# AlreadyClosedError etc. derive straight from Exception, so `except dds.Error`
+# misses them (e.g. a peer's data asked for just as that peer leaves).
+DDS_ERRORS: tuple[type[BaseException], ...] = tuple(
+    c for c in vars(dds).values() if isinstance(c, type) and issubclass(c, BaseException))
+
 ROOT = Path(__file__).resolve().parents[3]
 NODE_QOS_ENV = "PROTORIG_NODE_QOS"          # generated discovery settings (set by protorig run)
 NODE_PROFILE = "protorig_node::Participant"  # the profile inside that file
@@ -469,7 +475,7 @@ class App:
                 # participant at once can let readers process "participant gone"
                 # first and record "lost". A short pause lets the dispose land first.
                 time.sleep(DISPOSE_LINGER)
-        except dds.Error as e:
+        except DDS_ERRORS as e:
             log(self.who, "WARN", f"couldn't dispose the heartbeat: {e}")
 
     def _close(self) -> None:
@@ -484,6 +490,6 @@ class App:
             self._conditions.clear()
             self.participant.close_contained_entities()
             self.participant.close()
-        except dds.Error as e:
+        except DDS_ERRORS as e:
             log(self.who, "WARN", f"cleanup: {e}")
         self.participant = None

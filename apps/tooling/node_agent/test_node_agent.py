@@ -34,7 +34,7 @@ PI_RUN = ["mon", "worker --crash-after 1", "quiet --no-heartbeat", "stubborn --i
           f"uni --crash-after 1 --crash-text '{UNI}'", "missing_app", "cpp_thing"]
 PROBE = '''import sys, time
 from pathlib import Path
-from fw.app import App
+from fw.app import DDS_ERRORS, App
 name = Path(__file__).resolve().parent.name
 no_beat = "--no-heartbeat" in sys.argv
 app = App(name, "agent test probe", heartbeat=not no_beat)
@@ -111,7 +111,7 @@ class Rows:
                     app = self._h.get(info.instance_handle)
                     if app:
                         self.inst[app] = str(info.state.instance_state)
-            except dds.Error:
+            except DDS_ERRORS:
                 pass
             time.sleep(0.02)
 
@@ -235,7 +235,7 @@ def test_B10_B12_sender_skipped_unknown_acted_on(bus, rows, start_agent, sender,
                 try:
                     if w.matched_subscription_participant_data(h).participant_name.name == "pi/node_agent":
                         return True
-                except dds.Error:
+                except DDS_ERRORS:
                     pass
             return False
         wait_for(agent_matched, 5, "the agent's reader")

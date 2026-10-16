@@ -20,6 +20,7 @@ REPO = Path(__file__).resolve().parent.parent
 SAMPLE = "sample-scenario"          # the framework tests' own scenario (never a real demo's name)
 sys.path.insert(0, str(REPO / "libs" / "py"))
 sys.path.insert(0, str(REPO / "cli"))
+from fw.app import DDS_ERRORS             # noqa: E402
 
 PROBE = '''
 import os
@@ -179,7 +180,7 @@ def _heartbeat_states(bus, node):
                         seen.append(("alive", info.instance_handle))
                     elif not info.valid and any(h == info.instance_handle for _, h in seen):
                         seen.append((str(info.state.instance_state), info.instance_handle))
-            except dds.Error:
+            except DDS_ERRORS:
                 pass
             time.sleep(0.05)
     t = threading.Thread(target=loop, daemon=True)
@@ -444,3 +445,16 @@ def test_new_scenario_is_valid(repo_copy):
 def test_scenario_local_app(repo_copy):
     assert _protorig(repo_copy, "new", "app", "only_here", "--scenario", SAMPLE).returncode == 0
     assert (repo_copy / "scenarios" / SAMPLE / "apps" / "tooling" / "only_here" / "main.py").exists()
+
+
+def test_dds_errors_catches_every_connext_error():
+    """Connext's errors share no base besides Exception: `except dds.Error` misses
+    e.g. PreconditionNotMetError (seen in Bus.send when a reader left mid-match)."""
+    import rti.connextdds as dds
+    p = dds.DomainParticipant(0, dds.DomainParticipantQos())
+    p.close()
+    with pytest.raises(DDS_ERRORS) as e:
+        p.qos                                    # any use of a closed entity
+    assert not isinstance(e.value, dds.Error)    # the case `except dds.Error` let through
+    for name in ("Error", "PreconditionNotMetError", "AlreadyClosedError", "TimeoutError"):
+        assert getattr(dds, name) in DDS_ERRORS

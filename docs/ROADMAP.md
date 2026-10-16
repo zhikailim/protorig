@@ -14,15 +14,14 @@ approved, waits for an earlier row) · **Planned** (designed, requirements not
 written yet) · **Waits** (deferred until its trigger happens) · **Decide**
 (an open decision, usually at bring-up).
 
-Status: 8 Oct 2026.
+Status: 16 Oct 2026.
 
 
 ## 1. Next, in build order
 
 | # | Item | What it gives | State | Detail |
 |---|---|---|---|---|
-| 3 | `run --sim` through agents (step 4b) | Rehearsal on one PC works exactly like the rig: the Control Panel's machine-level commands too | Ready | run.md U2; node_agent.md N2 |
-| 4 | `check` rules (step 5) | Catches variants that would cut off default peers (V8), `node_agent` in `run:`, an app twice on a node, app names over 26 characters. Makes `Variant.Alert.BestEffort` reader-only; removes `node_agent` from temperature-skeleton | Approved | node_agent.md N2, N13 V8 |
+| 4 | `check` rules (step 5) | Catches variants that would cut off default peers (V8), `node_agent` in `run:`, an app twice on a node, app names over 26 characters. Makes `Variant.Alert.BestEffort` reader-only | Ready | node_agent.md N2, N13 V8 |
 
 
 ## 2. The first demo (temperature-skeleton)
@@ -73,6 +72,7 @@ Status: 8 Oct 2026.
 
 ## Done
 
+- 16 Oct 2026: `run --sim` through agents (step 4b, row 3): one agent per node on this PC, the same start/watch/stop as `--live`.
 - 8 Oct 2026: `run <scenario> --live` (step 4a): the whole rig up through its agents with one command (U11, U12); agents skip `node_agent` in `run:` (B31), removed from temperature-skeleton.
 - 8 Oct 2026: `protorig agent start|stop|status` (step 3b, row 2): background start, stop through a PID-checked file, status of every node (N1, N1a).
 - 7 Oct 2026: `run <scenario>` finds this machine's node from its IP and checks its os/arch (U4, U5, U13; row 1).

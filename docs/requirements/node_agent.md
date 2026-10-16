@@ -6,8 +6,8 @@ N11 addition 1 (participant named node/app, Python) and N14; the note protocol
 is removed. Step 3a (5 Oct 2026): the agent itself, N3-N8 and N11-N13, as
 behaviour rows B1-B27 in apps/tooling/node_agent/README.md. Step 3b (8 Oct
 2026): the `protorig agent start|stop|status` command (N1, N1a; agent rows
-B28-B30; tests/test_agent_cli.py). Not built yet: --sim through agents (N2,
-step 4).
+B28-B30; tests/test_agent_cli.py). Step 4 (8-16 Oct 2026): `run --live`
+(run.md U11, U12) and `run --sim` through agents (N2; cli/sim.py).
 - N1-N3, N5-N8: approved in detail.
 - N4: REVISED and approved 30 Sep 2026 (the agent owns the process, the app
   owns its behaviour).

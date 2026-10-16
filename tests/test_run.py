@@ -123,16 +123,17 @@ class RunProcess:
 # --- U10 / U2 / U6 / decisions 1 and 3: the plan, seen through --dry-run ------------
 
 def test_dry_run_sim_plans_every_node(rig):
+    """U2 through agents (N2): an agent per managed node, the twin directly."""
     out = protorig(rig, "run", SAMPLE, "--sim", "--dry-run")
     assert out.returncode == 0, out.stdout + out.stderr
     o = out.stdout
-    assert "would start 3 app(s)" in o
-    assert "desk/probe:" in o and "--node desk" in o and "--scenario sample-scenario" in o
-    assert "'two words'" in o                                   # U6: arguments passed through, intact
-    assert "hpc/crasher:" in o
+    assert "would start 2 agent(s) and 1 twin(s), then send start * to each agent" in o
+    assert "desk/node_agent:" in o and "--node desk" in o and "--scenario sample-scenario" in o
+    assert "hpc/node_agent:" in o
     assert "ecu/tc397_twin:" in o and "--node ecu" in o         # U2: the twin stands in for the ECU
-    assert "hpc/missing_app: SKIPPED, no such app yet" in o     # decision 1
-    assert "hpc/cpp_thing: SKIPPED, C/C++ app, not built yet" in o   # decision 3
+    assert "desk/node_agent will start: probe --label 'two words'" in o     # U6: arguments intact
+    assert "hpc/node_agent will start: crasher; missing_app (UNAVAILABLE: no such app" in o    # decision 1
+    assert "cpp_thing (UNAVAILABLE: C/C++ app, not built yet" in o           # decision 3
     assert "<mask>SHMEM</mask>" in o                            # U3 shown
     assert not (rig / "build").exists(), "a dry run must write nothing"
 
@@ -368,39 +369,45 @@ def test_is_local_ip(ip, local):
 # --- live: U2, U3, U7, U8, U9, decision 2 -----------------------------------------------
 
 def test_sim_live(rig, bus):
-    """The whole sample on this machine: data flows, nothing uses the network, a
-    crash is reported while the rest keep running, and Ctrl-C stops everything.
-    (QoS-variant switches are the node agent's job, N13: not tested through run.)"""
+    """The whole sample on this machine, through one agent per node (U2, N2): data
+    flows, nothing uses the network, a crash is reported while the rest keep
+    running, and Ctrl-C stops the apps, then the agents and the twin."""
     from fw.testing import wait_for
     temps = bus.listen("Example Temperature")
     beats = bus.listen("_sys/NodeStatus")
     run = RunProcess(rig, SAMPLE, "--sim", "--domain", str(bus.domain))
     try:
-        wait_for(lambda: temps.count() >= 5, 15, "the twin's data")
-        wait_for(lambda: any(b.app == "probe" and b.node == "desk" for b in beats.all()), 15,
+        wait_for(lambda: temps.count() >= 5, 20, "the twin's data")
+        wait_for(lambda: any(b.app == "probe" and b.node == "desk" for b in beats.all()), 20,
                  "the probe's heartbeat as node desk")                                  # U2
-        wait_for(lambda: "hpc/crasher" in run.output and "CRASHED (exit 3)" in run.output, 10, "the crash report")
-        assert "the other apps keep running" in run.output                              # decision 2
+        wait_for(lambda: any(b.app == "node_agent" and b.node == "hpc" for b in beats.all()), 5,
+                 "hpc's agent")                                                          # N2
+        wait_for(lambda: "hpc/crasher CRASHED" in run.output, 15, "the crash report")
+        wait_for(lambda: "ALERT CRITICAL crash:crasher (hpc/node_agent)" in run.output, 5, "the crash alert")
         n = temps.count()
         wait_for(lambda: temps.count() >= n + 10, 5, "the twin to keep publishing after the crash")
 
-        # U3: every app participant advertises shared memory only: nothing reaches the network.
+        # U3: every participant advertises shared memory only: nothing reaches the network.
         p = bus.participant
         names = {}
         for h in p.discovered_participants():
             d = p.discovered_participant_data(h)
             names[d.participant_name.name] = {str(l.kind) for l in d.default_unicast_locators}
-        for who in ("desk/probe", "ecu/tc397_twin"):
+        for who in ("desk/probe", "ecu/tc397_twin", "desk/node_agent", "hpc/node_agent", "sim/run"):
             assert names.get(who) == {"LocatorKind.SHMEM"}, names
 
-        # U8: output prefixed per app; U6: arguments arrived intact.
-        assert any(l.startswith("desk/probe") and "LABEL=two words" in l for l in run.lines), run.output
+        # Decision 3 (4b): app lines come through the agent with one label; arguments intact.
+        assert any(l.startswith("desk/probe | ") and "LABEL=two words" in l for l in run.lines), run.output
+        assert not any(l.count(" | ") > 1 and "/node_agent" in l.split(" | ")[0] for l in run.lines)
         assert run.output.count("[RTI LICENSE]") <= 1                                   # banner once
+        assert not [l for l in run.lines if not l.strip() or l.rstrip().endswith(" |")]   # no blank lines
 
         code = run.ctrl_c()                                                              # U9
         assert "stopping every app" in run.output
-        assert "desk/probe stopped (exit 0)" in run.output and "ecu/tc397_twin stopped (exit 0)" in run.output
-        assert code == 1          # the crasher failed, so run reports failure
+        assert "desk/probe STOPPED" in run.output
+        for who in ("desk/node_agent", "hpc/node_agent", "ecu/tc397_twin"):
+            assert f"{who} stopped (exit 0)" in run.output, run.output
+        assert code == 1          # the crasher failed (and two apps are unavailable)
     finally:
         run.kill()
 
@@ -472,3 +479,37 @@ def test_fuzz_arguments(rig):
             args.append("--dry-run")          # never start apps from the fuzz loop
         out = protorig(rig, "run", *args, timeout=30)
         assert "Traceback" not in out.stdout + out.stderr, (args, out.stdout + out.stderr)
+
+
+# B13: Ctrl-C during a Python app's imports ends it with exit 1 (importing
+# Connext turns the interrupt into an ImportError), so the exit code can't say
+# "stopped while starting"; the time since its start does.
+EXITS_1_ON_CTRL_C = """
+import signal, sys, time
+def bye(*_):
+    sys.exit(1)
+signal.signal(signal.SIGINT, bye)
+if hasattr(signal, "SIGBREAK"):          # Windows: Supervised.interrupt sends Ctrl-Break
+    signal.signal(signal.SIGBREAK, bye)
+print("up", flush=True)
+for _ in range(300):
+    time.sleep(0.1)
+"""
+
+
+@pytest.mark.parametrize("since_start, report, failed", [
+    (0.0, "stopped (by the signal, before it had finished starting)", False),
+    (60.0, "CRASHED (exit 1)", True),                 # long after start: a real failure
+])
+def test_stop_while_starting_is_not_a_crash(since_start, report, failed):
+    import run as runmod
+    from fw.supervise import Supervised
+    from fw.testing import wait_for
+    s = Supervised([sys.executable, "-c", EXITS_1_ON_CTRL_C], [], dict(os.environ), watch_launcher=False)
+    try:
+        wait_for(lambda: "up" in s.lines, 10, "the script to start")
+        s.interrupt()
+        assert s.ended_within(10) and s.returncode == 1
+        assert runmod.stop_result(s, s.started + since_start) == (report, failed)
+    finally:
+        s.terminate(grace=0.1)

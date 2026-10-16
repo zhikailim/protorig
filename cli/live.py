@@ -37,6 +37,7 @@ from run import RunError, this_node
 
 sys.path.insert(0, str(repo.ROOT / "libs" / "py"))
 from fw.agentfiles import AgentFiles          # noqa: E402
+from fw.app import DDS_ERRORS                 # noqa: E402
 
 POLL = 0.1
 FIRST_NOTE = 2.0        # seconds before the first "waiting for" line
@@ -45,6 +46,7 @@ PARTIAL_SETTLE = 3.0    # --partial: after the first agent, wait this long for o
 SCENARIO_WAIT = 2.0     # an agent's own row (with its scenario) arrives just after its heartbeat
 MATCH_WAIT = 5.0        # for an agent's command reader to match ours before sending
 RETRY_AFTER = 3.0       # U11 step 3
+SIM_UP = 30.0           # --sim: its own agents, on this PC, must be up within this
 STOP_WAIT = 15.0        # U11 step 5
 RUNNING = {"STARTING", "RUNNING", "RESTARTING"}                       # an app's process is up
 ENDED = {"NOT_RUNNING", "STOPPED", "KILLED", "CRASHED", "UNAVAILABLE"}  # no process
@@ -125,7 +127,7 @@ class Rig(agentcmd.Listener):
                 try:
                     k = self._alerts.key_value(info.instance_handle)
                     out.append(f"alert cleared: {k.alert_id} ({k.source})")
-                except self._dds.Error:
+                except DDS_ERRORS:
                     pass
         return out
 
@@ -137,7 +139,7 @@ class Rig(agentcmd.Listener):
             try:
                 if self._cmd_w.matched_subscription_participant_data(h).participant_name.name == f"{node}/node_agent":
                     return True
-            except self._dds.Error:
+            except DDS_ERRORS:
                 pass
         return False
 
@@ -164,8 +166,13 @@ def external_topics(node: str) -> list[str]:
 
 
 class Live:
-    def __init__(self, args, data: dict):
+    """sim=True: the same steps for `run --sim` (U2), whose agents and twins run
+    here, started by sim.py: twins are announced instead of devices, agents that
+    don't come up within SIM_UP are a failure, and tick() lets sim.py watch them."""
+
+    def __init__(self, args, data: dict, sim: bool = False):
         self.args = args
+        self.sim = sim
         self.scenario = args.scenario
         self.nodes = data["nodes"]
         self.managed = [n for n, s in self.nodes.items() if isinstance(s, dict) and not s.get("external")]
@@ -173,12 +180,14 @@ class Live:
         self.data = data
         self.stopping = threading.Event()
         self.failed: set[str] = set()             # "node/app" that failed (exit code 1)
+        self.give_up = False                      # sim: one of its own agents died
         self.alive: set[str] = set()
 
     # --- Ctrl-C: first asks to stop, second leaves at once (U11 step 5)
     def on_signal(self, *_):
         if self.stopping.is_set():
-            say("second Ctrl-C: leaving without waiting (the agents carry on)")
+            say("second Ctrl-C: leaving without waiting " + (
+                "(agents and twins stop by themselves within about 1 s)" if self.sim else "(the agents carry on)"))
             os._exit(1)
         self.stopping.set()
 
@@ -208,7 +217,11 @@ class Live:
         for n, topics in ext_topics.items():
             for t in topics:
                 rig.watch_external(t)
-            say(f"{n}: external device, power it on" + (f" (watching for {', '.join(topics)})" if topics else ""))
+            if self.sim:
+                twin = self.nodes[n].get("sim")
+                say(f"{n}: external device; " + (f"its twin {twin} stands in" if twin else "no twin: nothing stands in"))
+            else:
+                say(f"{n}: external device, power it on" + (f" (watching for {', '.join(topics)})" if topics else ""))
         self.ext_seen: set[str] = set()
 
         targets = self.wait_for_agents(rig, domain, ext_topics)
@@ -247,6 +260,7 @@ class Live:
         deadline = time.monotonic() + self.args.start_timeout
         flagged = False
         while not self.stopping.is_set():
+            self.tick()
             for r in rig.take_rows():
                 if r.node in targets and r.app != "node_agent":
                     changed.add(r.node)
@@ -270,14 +284,22 @@ class Live:
             time.sleep(POLL)
         return self.stop_all(rig, targets)
 
+    def tick(self) -> None:
+        """Called on every pass of the watch loop (sim.py watches its processes here)."""
+
     def wait_for_agents(self, rig: Rig, domain: int, ext_topics) -> list[str] | None:
         first_seen = None
-        next_note = time.monotonic() + FIRST_NOTE      # discovery takes a moment: don't cry wolf
+        start = time.monotonic()
+        next_note = start + FIRST_NOTE                 # discovery takes a moment: don't cry wolf
         while not self.stopping.is_set():
+            self.tick()
             present = rig.agents() & set(self.managed)
             missing = [n for n in self.managed if n not in present]
             if not missing:
                 return list(self.managed)
+            if self.sim and (self.give_up or time.monotonic() - start > SIM_UP):
+                say(f"the agents of {', '.join(missing)} didn't come up (see their lines above)")
+                return None
             if self.args.partial and present:
                 first_seen = first_seen or time.monotonic()
                 if time.monotonic() - first_seen >= PARTIAL_SETTLE:
@@ -355,7 +377,8 @@ class Live:
                 elif state == "KILLED" and r.detail.startswith("forced"):
                     self.failed.add(f"{n}/{r.app}")
         lines = [f"{n}/{r.app} {short(r.state)}" for n in targets for r in rig.apps(n)]
-        say("how each app ended: " + (", ".join(lines) if lines else "no apps") + "; the agents stay up")
+        say("how each app ended: " + (", ".join(lines) if lines else "no apps")
+            + ("; stopping the agents and twins next" if self.sim else "; the agents stay up"))
         if self.failed:
             say(f"failed: {', '.join(sorted(self.failed))}")
         return 1 if self.failed else 0

@@ -90,19 +90,6 @@ def entries(spec: dict, node: str) -> list[tuple[str, list[str]]]:
         raise RunError(str(e)) from None
 
 
-def plan_sim(scenario: str, data: dict) -> list[Launch]:
-    """U2: every managed node's apps, plus each external node's sim twin."""
-    plan = []
-    for node, spec in data["nodes"].items():
-        if spec.get("external"):
-            twin = spec.get("sim")
-            plan.append(resolve(scenario, twin, node, [], want_sim=True) if twin
-                        else Launch(node, "(external)", missing="external node with no sim: twin; nothing stands in for it"))
-        else:
-            plan += [resolve(scenario, app, node, args) for app, args in entries(spec, node)]
-    return plan
-
-
 def this_node(scenario: str, data: dict, node: str | None = None, prog: str = "run") -> str:
     """U4/U5/U13: the node this machine is, named with --node or found from its IP,
     and refused unless this machine really is it (IP, os, arch). Shared with
@@ -152,6 +139,8 @@ class Console:
         self._banner_seen: set[str] = set()
 
     def line(self, who: str, text: str):
+        if not text.strip():
+            return                                    # the blank lines after Connext's banner
         with self._lock:
             if text.startswith(BANNER):
                 if text in self._banner_seen:
@@ -212,6 +201,7 @@ def supervise_until_done(running: dict[str, Supervised], console: Console) -> in
 
     if stop.is_set():
         console.run("stopping every app ...")
+        asked = time.monotonic()
         for s in running.values():
             s.interrupt()
         deadline = time.monotonic() + STOP_GRACE
@@ -222,15 +212,30 @@ def supervise_until_done(running: dict[str, Supervised], console: Console) -> in
                 s.terminate(grace=0.1)
             if who not in reported:
                 reported.add(who)
-                code = s.returncode
-                console.run(f"{who} {describe_exit(code)}")
-                failed |= code not in (0, None) and not _stopped_by_signal(code)
+                text, bad = stop_result(s, asked)
+                console.run(f"{who} {text}")
+                failed |= bad
     return 1 if failed else 0
 
 
 def _stopped_by_signal(code: int) -> bool:
     """A negative code (POSIX) or Ctrl-Break's exit code (Windows) after we asked it to stop."""
     return code < 0 or (os.name == "nt" and code in (0xC000013A, -1073741510))
+
+
+# Ctrl-C this soon after start can land inside Python's imports: importing Connext
+# turns it into an ImportError (exit 1), not a signal exit. Generous for a Pi.
+STARTING = 5.0
+
+
+def stop_result(s: Supervised, asked_at: float) -> tuple[str, bool]:
+    """(report, failed) for a process we asked to stop at asked_at (time.monotonic())."""
+    code = s.returncode
+    if code in (0, None) or code == EXIT_KILLED:
+        return describe_exit(code), False
+    if _stopped_by_signal(code) or asked_at - s.started < STARTING:
+        return "stopped (by the signal, before it had finished starting)", False
+    return describe_exit(code), True
 
 
 # ------------------------------------------------------------------ entry point
@@ -283,11 +288,12 @@ def _main(args, extra: list[str], app_args: list[str]) -> int:
     else:
         data = load_scenario(args.scenario)
         common += ["--scenario", args.scenario]
-        if args.sim:                                                   # U2, U3
-            plan = plan_sim(args.scenario, data)
-            settings_text = discovery.sim_qos()
-            settings_path = repo.ROOT / "build" / args.scenario / "_sim" / "node_qos.xml"
-            what = f"{args.scenario} --sim (this machine only)"
+        if args.sim:                                                   # U2 (via agents, N2), U3: sim.py
+            if args.domain is not None:
+                common += ["--domain", str(args.domain)]
+            import sim
+            args.start_timeout = 20.0
+            return sim.main(args, data, common, env)
         else:                                                          # U4, U5, U13
             node = this_node(args.scenario, data, args.node)
             plan = plan_node(args.scenario, data, node)

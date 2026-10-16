@@ -248,7 +248,7 @@ The numbered requirements (U1–U13, with status) are in [requirements/run.md](r
 
 | Mode | Starts | Discovery settings it generates |
 |---|---|---|
-| `--sim` | every node's apps on this machine, plus each external node's `sim:` twin; each app gets its node's name (`--node hpc-pi`) | shared memory only: nothing reaches the network, so a sim run on domain 0 can't mix with the real rig; Admin Console on the same PC still sees it |
+| `--sim` | one node agent per managed node on this machine (named after the node), which start their apps as on the rig, plus each external node's `sim:` twin; the Control Panel's machine-level commands work as on the rig | shared memory only: nothing reaches the network, so a sim run on domain 0 can't mix with the real rig; Admin Console on the same PC still sees it |
 | `<scenario>` alone, or `--node <node>` | this machine's node's apps: the one node whose IP this machine has (U13), or the one named; refuses unless this machine has the node's IP, os and arch (starting anyway would silently discover nothing) | every other node's IP as a unicast peer (`N@`, N = its apps + 1, at least 4), DDS bound to this node's own IP (the known-good profile's lesson), no multicast |
 | `--app <app>` | one app, node name `local` | none: Connext defaults |
 

@@ -3,7 +3,7 @@
 Status (30 Sep 2026):
 - U1-U10 and D1-D3: approved 29 Sep 2026, built and tested.
 - B1-B7: added while building; approved 30 Sep 2026.
-- U2 (changed): approved 30 Sep 2026 as part of node_agent (N2); not built yet.
+- U2 (changed): approved 30 Sep 2026 as part of node_agent (N2); built 16 Oct 2026 (cli/sim.py).
 - U11 (--live): moved here from node_agent (N9); approved 30 Sep 2026, built 8 Oct 2026 (cli/live.py, tests/test_live.py).
 - U12 (where --live runs): moved here from node_agent (N10); approved 5 Oct 2026, built 8 Oct 2026.
 - U4, U5, U12 (changed) and U13 (which node is this machine): approved
@@ -28,7 +28,7 @@ U2. `protorig run <scenario> --sim` starts every node's apps on this
     machine, plus each external node's twin (e.g. `tc397_twin` in place of
     the TC397). Each app is started with its node's name (`--node hpc-pi`),
     so the node board shows the real layout.
-    CHANGED 30 Sep 2026 (N2, option A), not built yet: `--sim` starts one
+    CHANGED 30 Sep 2026 (N2, option A), built 16 Oct 2026: `--sim` starts one
     agent per managed node (named after the node) and the external nodes'
     twins directly, then tells every agent "start *". Ctrl-C stops
     everything, agents included.
@@ -186,3 +186,18 @@ B9. `--live` sends a start only once the agent's command reader has matched
 B10. "Some app failed" (exit 1) means: UNAVAILABLE, not RUNNING when
     --start-timeout passes, CRASHED at any time, or forced at the end. A KILLED
     app (a demo beat) is not a failure.
+
+
+## --sim through agents (step 4b): B11-B12 approved 8 Oct 2026 (decisions 1 and 3); B13 added while building, for approval
+
+B11. `--sim` refuses if agents for this scenario's nodes already run on this
+     PC (from `agent.pid`), or if an agent for one of its nodes is heard here
+     on the same domain: sim agents would meet them over shared memory and one
+     would quit (N12 rule 2). The message says which, and how to stop them.
+B12. Agents' lines (already labelled `node/app | ...` by the agent) are shown
+     as they are; twins' lines get run's label. Blank lines (Connext's banner
+     ends with some) are dropped.
+B13. An agent that ends by itself is reported at once, and `--sim` stops
+     waiting for it; a process stopped by Ctrl-C within 5 s of its start is
+     reported as stopped, not crashed, whatever its exit code (Ctrl-C during
+     Python's imports gives exit 1). Applies to `run --node`/`--app` too.

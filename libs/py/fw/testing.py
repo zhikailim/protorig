@@ -44,7 +44,7 @@ import rti.connextdds as dds
 
 from fw import topics as fw_topics
 from fw import types as T
-from fw.app import DEFAULT_PROFILE, ROOT, qos_files
+from fw.app import DDS_ERRORS, DEFAULT_PROFILE, ROOT, qos_files
 from fw.supervise import Supervised
 
 # Test domains: never 0 or the low numbers a live rig uses, and all BELOW the
@@ -186,7 +186,7 @@ class Bus:
                     try:
                         if w.matched_subscription_participant_data(h).participant_name.name == who:
                             return True
-                    except dds.Error:                  # that reader went away meanwhile
+                    except DDS_ERRORS:                  # that reader went away meanwhile
                         pass
                 return False
             wait_for(matched, match_timeout, f"{who}'s reader of '{topic}' to match")
@@ -194,8 +194,12 @@ class Bus:
         # learned about this writer drops the sample, and nothing re-sends it (a
         # reliable one would recover it). The reader's side can't be observed from
         # here, so give it a moment when any matched reader is best effort.
-        if any(w.matched_subscription_data(h).reliability.kind == dds.ReliabilityKind.BEST_EFFORT
-               for h in w.matched_subscriptions):
+        def best_effort(h) -> bool:
+            try:
+                return w.matched_subscription_data(h).reliability.kind == dds.ReliabilityKind.BEST_EFFORT
+            except DDS_ERRORS:                         # that reader went away meanwhile
+                return False
+        if any(best_effort(h) for h in w.matched_subscriptions):
             time.sleep(BEST_EFFORT_SETTLE)
         w.write(make_sample(topic, values))
 

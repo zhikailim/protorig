@@ -25,7 +25,7 @@ from pathlib import Path
 
 import rti.connextdds as dds
 
-from fw.app import App, ROOT, VARIANT_LIBRARY, log
+from fw.app import DDS_ERRORS, App, ROOT, VARIANT_LIBRARY, log
 from fw import scenario as fw_scenario
 from fw import types as T
 from fw.agentfiles import AgentFiles
@@ -145,7 +145,7 @@ class Agent:
         None if unknown: gone already, or not named node/app."""
         try:
             name = self.control_r.matched_publication_participant_data(info.publication_handle).participant_name.name
-        except dds.Error:
+        except DDS_ERRORS:
             return None
         return name if name.count("/") == 1 and all(name.split("/")) else None
 
@@ -178,7 +178,7 @@ class Agent:
         participant ID compares higher leaves, so exactly one stays."""
         try:
             key = self.status_r.matched_publication_participant_data(info.publication_handle).key.value
-        except dds.Error:
+        except DDS_ERRORS:
             return
         theirs = "".join(f"{v:08x}" for v in key)
         mine = str(self.app.participant.instance_handle)
@@ -294,7 +294,7 @@ class Agent:
         try:
             h = self.alert_w.register_instance(T.Alert(source=self.who[:64], alert_id=alert_id))
             self.alert_w.dispose_instance(h)
-        except dds.Error as e:
+        except DDS_ERRORS as e:
             log(self.who, "ERROR", f"couldn't clear alert {alert_id!r}: {e}")
 
     def _write(self, w, sample) -> None:
@@ -322,7 +322,7 @@ class Agent:
         for name in [*self.ctl.apps, "node_agent"]:
             try:
                 self.state_w.dispose_instance(self.state_w.lookup_instance(T.AppState(node=self.app.node[:32], app=name)))
-            except dds.Error:
+            except DDS_ERRORS:
                 pass
         time.sleep(0.2)                                # let the disposals go out before DDS closes
         self.files.release()                           # B30: agent.pid and agent.stop gone

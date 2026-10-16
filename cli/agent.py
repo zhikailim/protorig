@@ -26,7 +26,7 @@ from run import RunError, load_scenario, this_node
 
 sys.path.insert(0, str(repo.ROOT / "libs" / "py"))
 from fw.agentfiles import AgentFiles, kill_process   # noqa: E402
-from fw.app import DEFAULT_PROFILE, NODE_PROFILE, NODE_QOS_ENV, QOS_FILES   # noqa: E402
+from fw.app import DDS_ERRORS, DEFAULT_PROFILE, NODE_PROFILE, NODE_QOS_ENV, QOS_FILES   # noqa: E402
 from fw.supervise import LAUNCHER_ENV, process_alive   # noqa: E402
 
 AGENT_MAIN = repo.ROOT / "apps" / "tooling" / "node_agent" / "main.py"
@@ -86,7 +86,7 @@ class Listener:
         for r in self._entities():
             try:
                 r.close()
-            except self._dds.Error:
+            except DDS_ERRORS:
                 pass
         self.participant.close()
 

@@ -120,10 +120,10 @@ def start_agent(rig, bus, scen=SCEN) -> int:
 class Live:
     """`protorig run <scenario> --live` as a live process, its output collected."""
 
-    def __init__(self, rig, bus, *extra, scen=SCEN):
+    def __init__(self, rig, bus, *extra, scen=SCEN, mode="--live"):
         kw = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
         self.proc = subprocess.Popen(
-            [sys.executable, str(rig / "cli" / "main.py"), "run", scen, "--live", "--domain", str(bus.domain), *extra],
+            [sys.executable, str(rig / "cli" / "main.py"), "run", scen, mode, "--domain", str(bus.domain), *extra],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", cwd=rig, **kw)
         self.lines: list[str] = []
         threading.Thread(target=self._read, daemon=True).start()
@@ -174,10 +174,27 @@ def live_procs():
         p.kill()
 
 
-def live(rig, bus, live_procs, *extra, scen=SCEN) -> Live:
-    p = Live(rig, bus, *extra, scen=scen)
+def live(rig, bus, live_procs, *extra, scen=SCEN, mode="--live") -> Live:
+    p = Live(rig, bus, *extra, scen=scen, mode=mode)
     live_procs.append(p)
     return p
+
+
+def sim(rig, bus, live_procs, scen=SCEN) -> Live:
+    """`run <scenario> --sim`: its agents and twins run here, started by run."""
+    return live(rig, bus, live_procs, scen=scen, mode="--sim")
+
+
+def sim_agent_pid(rig, node="desk", scen=SCEN, timeout=20) -> int:
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        rec = AgentFiles.of(rig, scen, node).read_pid()
+        if rec is not None:
+            if rec not in seen:
+                seen.append(rec)
+            return rec.pid
+        time.sleep(0.1)
+    raise AssertionError("no agent.pid from the sim agent")
 
 
 # --- U11: start, show, stop -------------------------------------------------------------
@@ -402,3 +419,84 @@ def test_agent_skips_node_agent_in_run_list(rig, bus, live_procs):
     assert "run: lists node_agent: skipped" in log
     assert "started node_agent" not in log and "desk/node_agent STARTING" not in p.output
     assert p.finish() == 0
+
+
+# --- run --sim through agents (U2 as changed by N2; step 4b) ------------------------------
+
+def test_sim_refuses_rig_agents_of_this_scenario(rig, bus):
+    """Decision 1 (4b): a rig agent for this scenario on this PC would meet the sim's."""
+    pid = start_agent(rig, bus)
+    out = subprocess.run([sys.executable, str(rig / "cli" / "main.py"), "run", SCEN, "--sim", "--domain", str(bus.domain)],
+                         capture_output=True, text=True, encoding="utf-8", cwd=rig, timeout=60)
+    assert out.returncode == 1, out.stdout
+    assert f"agents for this scenario already run on this PC (desk: process {pid})" in out.stdout
+    assert "protorig agent stop live-sample --node desk" in out.stdout
+    assert process_alive(pid)                                     # left alone
+
+
+def test_sim_refuses_an_agent_already_heard_here(rig, bus):
+    """An agent for the same node from another scenario, on the same domain."""
+    scenario(rig, "other", desk={**DESK, "run": ["probe"]})
+    start_agent(rig, bus, scen="other")
+    out = subprocess.run([sys.executable, str(rig / "cli" / "main.py"), "run", SCEN, "--sim", "--domain", str(bus.domain)],
+                         capture_output=True, text=True, encoding="utf-8", cwd=rig, timeout=60)
+    assert out.returncode == 1 and "an agent for desk already runs on this PC on domain" in out.stdout, out.stdout
+    assert "Traceback" not in out.stdout + out.stderr
+
+
+def test_sim_machine_commands_reach_its_agents(rig, bus, live_procs):
+    """The point of 4b: a Control Panel command to a machine works in sim as on the rig."""
+    from fw import types as T
+    p = sim(rig, bus, live_procs)
+    p.wait_for("tc397: external device; its twin tc397_twin stands in")
+    p.wait_for("desk/probe RUNNING", timeout=30)
+    bus._cmd_id += 1
+    bus.send("_sys/DemoControl", T.DemoControl(target_node="desk", target_app="*", cmd_id=bus._cmd_id,
+                                               command=T.Command.CMD_KILL_APP), to="desk/node_agent")
+    p.wait_for("desk/probe KILLED: killed by test/bus")
+    assert p.finish() == 0                                        # a kill is a demo beat, not a failure
+    for who in ("desk/node_agent", "tc397/tc397_twin"):
+        assert f"{who} stopped (exit 0)" in p.output, p.output
+
+
+def test_sim_everything_stops_if_run_is_killed(rig, bus, live_procs):
+    """N6: the agents and twin watch run; the apps watch their agent."""
+    p = sim(rig, bus, live_procs)
+    p.wait_for("desk/probe RUNNING", timeout=30)
+    pid = sim_agent_pid(rig)
+    p.kill()                                                      # no goodbye
+    end = time.monotonic() + 10
+    while time.monotonic() < end and process_alive(pid):
+        time.sleep(0.1)
+    assert not process_alive(pid), "the sim agent outlived run"
+    st = agent(rig, "status", bus, SCEN, "--node", "desk")
+    assert st.returncode == 1                                     # nothing left heartbeating as desk
+
+
+def test_sim_agent_that_dies_at_start(rig, bus, live_procs):
+    (rig / "apps" / "tooling" / "node_agent" / "main.py").write_text("import sys\nsys.exit(5)\n", encoding="utf-8")
+    t0 = time.monotonic()
+    p = sim(rig, bus, live_procs)
+    assert p.proc.wait(30) == 1 and time.monotonic() - t0 < 20, p.output
+    time.sleep(0.2)
+    assert "desk/node_agent ended by itself: CRASHED (exit 5)" in p.output
+    assert "didn't come up" in p.output
+    assert "tc397/tc397_twin stopped" in p.output                    # the twin is stopped too
+    assert "desk/node_agent stopped" not in p.output                 # it crashed by itself: never relabelled
+
+
+def test_sim_second_ctrl_c_leaves_and_everything_stops(rig, bus, live_procs):
+    scenario(rig, SCEN, desk={**DESK, "run": ["stubborn"]}, tc397=TC397)
+    p = sim(rig, bus, live_procs)
+    p.wait_for("desk/stubborn RUNNING", timeout=30)
+    pid = sim_agent_pid(rig)
+    p.ctrl_c()
+    p.wait_for("stopping every app")
+    p.ctrl_c()
+    assert p.proc.wait(10) == 1
+    time.sleep(0.2)
+    assert "agents and twins stop by themselves" in p.output
+    end = time.monotonic() + 20                                   # the agent forces its stubborn app first
+    while time.monotonic() < end and process_alive(pid):
+        time.sleep(0.1)
+    assert not process_alive(pid)

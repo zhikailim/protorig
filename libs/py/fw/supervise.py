@@ -125,6 +125,7 @@ class Supervised:
         self.lines: list[str] = []
         self.returncode: int | None = None
         self._ended = threading.Event()
+        self.started = time.monotonic()        # for "stopped while still starting" (run)
         self.proc = subprocess.Popen(list(cmd) + self.args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                      text=True, encoding="utf-8", errors="replace", env=self._env,
                                      **_spawn_flags())

@@ -31,6 +31,7 @@ from fw.supervise import LAUNCHER_ENV, process_alive   # noqa: E402
 
 AGENT_MAIN = repo.ROOT / "apps" / "tooling" / "node_agent" / "main.py"
 LISTEN = 3.0            # seconds to listen for agents on DDS (N1)
+ROWS_WAIT = 2.0         # seconds for heard agents' rows to arrive (status)
 UP_TIMEOUT = 15.0       # start --background: the agent's first heartbeat within this (N1a step 1)
 STOP_GRACE = 10.0       # the agent's default --stop-grace
 STOP_EXTRA = 5.0        # stop waits STOP_GRACE + this (N1a step 5)
@@ -64,9 +65,41 @@ class Listener:
         alive = self._dds.InstanceState.ALIVE
         return [d for d, info in reader.read() if info.valid and info.state.instance_state == alive]
 
+    def peers(self) -> list[str]:
+        """The names of the other DDS participants heard now. Every protorig
+        process names its participant "node/app", heartbeat or not (twins have none)."""
+        names = set()
+        for h in self.participant.discovered_participants():
+            try:
+                names.add(self.participant.discovered_participant_data(h).participant_name.name)
+            except DDS_ERRORS:                     # it left meanwhile
+                pass
+        return sorted(names)
+
     def agents(self) -> set[str]:
         """Nodes whose agent is heartbeating now."""
         return {d.node for d in self._alive(self._hb) if d.app == "node_agent"}
+
+    def rows_in(self, nodes: list[str], seconds: float) -> None:
+        """Wait (up to `seconds`) until these agents' current rows have arrived: their
+        row writers matched, then Connext's own "history received" wait (the rows are
+        TRANSIENT_LOCAL: a late reader gets them, but just after the heartbeat)."""
+        want = {f"{n}/node_agent" for n in nodes}
+
+        def matched() -> bool:
+            got = set()
+            for h in self._rows.matched_publications:
+                try:
+                    got.add(self._rows.matched_publication_participant_data(h).participant_name.name)
+                except DDS_ERRORS:                     # it left meanwhile
+                    pass
+            return want <= got
+        end = time.monotonic() + seconds
+        if wait_for(matched, seconds):
+            try:
+                self._rows.wait_for_historical_data(self._dds.Duration(max(0.1, end - time.monotonic())))
+            except DDS_ERRORS:                         # timed out: show what has arrived
+                pass
 
     def app_rows(self, node: str) -> list:
         """The current rows of a node's apps (latest per app; a dead or stopped
@@ -192,7 +225,10 @@ def say(text: str) -> None:
 def start(args, data: dict, node: str) -> int:
     files = AgentFiles.of(repo.ROOT, args.scenario, node)
     rec = files.read_pid()
-    if files.identity(rec) != "gone":                                   # N1a step 7
+    ident = files.identity(rec)
+    if ident == "unknown":
+        raise RunError(f"an agent for {node} may already be running: {files.unknown_hint(rec.pid)}")
+    if ident != "gone":                                                 # N1a step 7
         raise RunError(f"an agent for {node} is already running (process {rec.pid}). "
                        f"Stop it first: protorig agent stop {args.scenario}")
     files.clear_stale()                                                 # leftovers of an agent that died
@@ -285,9 +321,8 @@ def stop(args, node: str) -> int:
         say(f"no agent running for {node}")
         return 0
     if args.force:                                                      # N1a step 6
-        if ident != "agent":
-            raise RunError(f"can't confirm process {rec.pid} is still the agent (its start time can't be "
-                           "read here), so it isn't killed. End it by hand if you're sure")
+        if ident != "agent":                                            # never kill what may not be ours
+            raise RunError(f"not killed: {files.unknown_hint(rec.pid)}")
         kill_process(rec.pid)
         wait_for(lambda: not process_alive(rec.pid), 5.0)
         files.release(rec.pid)
@@ -307,6 +342,9 @@ def stop(args, node: str) -> int:
             say("still stopping ...")
             next_note += 5.0
         time.sleep(POLL)
+    if ident == "unknown":                                              # likely not the agent at all
+        say(f"no agent stopped within {limit:g} s: {files.unknown_hint(rec.pid)}")
+        return 1
     say(f"the agent for {node} didn't stop within {limit:g} s. "
         f"`protorig agent stop {args.scenario} --force` kills it")
     return 1
@@ -324,8 +362,8 @@ def status(args, data: dict) -> int:
     settings = write_settings(files, data, me, "status_qos.xml")       # never the agent's own file
     listener = open_listener(domain_of(args, data), settings, f"{me}/agent_status")
     try:
-        if wait_for(lambda: set(targets) <= listener.agents(), LISTEN):
-            time.sleep(0.5)                                             # their rows arrive just after
+        wait_for(lambda: set(targets) <= listener.agents(), LISTEN)
+        listener.rows_in(sorted(set(targets) & listener.agents()), ROWS_WAIT)
         alive = listener.agents()
         for n in targets:
             if n not in alive:

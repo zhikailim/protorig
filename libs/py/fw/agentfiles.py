@@ -2,7 +2,7 @@
 fw.agentfiles — the files through which `protorig agent stop` reaches a node
 agent on the same machine (node_agent requirement N1a).
 
-    build/<scenario>/<node>/agent.pid    written by the agent: {"pid": N, "started": T}
+    build/<scenario>/<node>/agent.pid    written by the agent: {"pid": N, "started": T, "launcher": L}
     build/<scenario>/<node>/agent.stop   written by `agent stop`: the PID to stop
     build/<scenario>/<node>/agent.log    the agent's output when started --background
 
@@ -29,6 +29,7 @@ from pathlib import Path
 from fw.supervise import process_alive
 
 MAX_FILE = 4096           # bytes read from any of these files; a bigger one is garbage
+BOOT_SLACK = 60 * 10_000_000   # 60 s in FILETIME units: clock adjustments since boot
 
 
 def process_started(pid: int) -> int | None:
@@ -80,6 +81,7 @@ def kill_process(pid: int) -> None:
 class PidRecord:
     pid: int
     started: int | None          # None: written where the start time couldn't be read
+    launcher: int | None = None  # the `run --sim` this agent watches (N6); None: started by `agent start`
 
 
 def _read_small(path: Path) -> str | None:
@@ -91,6 +93,21 @@ def _read_small(path: Path) -> str | None:
     if len(raw) > MAX_FILE:
         return None
     return raw.decode("utf-8", errors="replace")
+
+
+def boot_filetime() -> int | None:
+    """When this machine booted, in the units process_started gives on Windows
+    (FILETIME: 100 ns since 1601). None elsewhere: there, an unreadable start
+    time doesn't happen in practice (Linux /proc is readable by all)."""
+    if os.name != "nt":
+        return None
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32")
+    k32.GetTickCount64.restype = ctypes.c_ulonglong
+    ft = wintypes.FILETIME()
+    k32.GetSystemTimeAsFileTime(ctypes.byref(ft))
+    return ((ft.dwHighDateTime << 32) | ft.dwLowDateTime) - k32.GetTickCount64() * 10_000
 
 
 def _write_atomic(path: Path, text: str) -> None:
@@ -135,11 +152,12 @@ class AgentFiles:
 
     # --- agent.pid ------------------------------------------------------------
 
-    def claim(self, pid: int | None = None) -> None:
-        """The agent: record its PID and start time (N1a step 2)."""
+    def claim(self, pid: int | None = None, launcher: int | None = None) -> None:
+        """The agent: record its PID and start time (N1a step 2), and the run that
+        launched it, if any (so `run --sim` can say which run to stop)."""
         pid = os.getpid() if pid is None else pid
         self.folder.mkdir(parents=True, exist_ok=True)
-        _write_atomic(self.pid_file, json.dumps({"pid": pid, "started": process_started(pid)}))
+        _write_atomic(self.pid_file, json.dumps({"pid": pid, "started": process_started(pid), "launcher": launcher}))
 
     def release(self, pid: int | None = None) -> None:
         """The agent, stopping cleanly: remove its files, but agent.pid only if it
@@ -156,14 +174,16 @@ class AgentFiles:
             return None
         try:
             data = json.loads(text)
-            pid, started = data["pid"], data.get("started")
-        except (ValueError, TypeError, KeyError):
+            pid, started, launcher = data["pid"], data.get("started"), data.get("launcher")
+        except (ValueError, TypeError, KeyError, AttributeError):
             return None
         if not isinstance(pid, int) or isinstance(pid, bool) or not 0 < pid <= 0xFFFFFFFF:
             return None
         if not isinstance(started, int) or isinstance(started, bool):
             started = None
-        return PidRecord(pid, started)
+        if not isinstance(launcher, int) or isinstance(launcher, bool) or not 0 < launcher <= 0xFFFFFFFF:
+            launcher = None
+        return PidRecord(pid, started, launcher)
 
     def identity(self, rec: PidRecord | None) -> str:
         """Is the process in agent.pid still that agent?
@@ -176,6 +196,11 @@ class AgentFiles:
             return "unknown"
         now = process_started(rec.pid)
         if now is None:
+            # Not readable: e.g. after a reboot Windows gave that PID to a system
+            # process. An agent that started before this boot can't still run.
+            boot = boot_filetime()
+            if boot is not None and rec.started < boot - BOOT_SLACK:
+                return "gone"
             return "unknown"
         return "agent" if now == rec.started else "gone"
 
@@ -185,6 +210,11 @@ class AgentFiles:
         """`agent stop`: ask the agent with this PID to stop (N1a step 3)."""
         self.folder.mkdir(parents=True, exist_ok=True)
         _write_atomic(self.stop_file, f"{pid}\n")
+
+    def unknown_hint(self, pid: int) -> str:
+        """What to do when identity() is "unknown" (start time unreadable)."""
+        return (f"can't tell whether process {pid} is still the agent (no access to it). If no agent "
+                f"runs for this node (e.g. after a reboot), delete {self.pid_file}")
 
     def stop_request(self) -> int | None:
         """The PID in agent.stop; -1 if the file exists but holds no valid PID

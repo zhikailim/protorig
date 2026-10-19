@@ -367,6 +367,11 @@ class App:
         else:
             log(self.who, "INFO", f"ignoring {cmd.name}: {_NOT_MINE.get(cmd, 'not an app command')}")
 
+    @property
+    def launcher_pid(self) -> int | None:
+        """The process that launched this app and is watched (N6); None if started by hand."""
+        return self._launcher_pid
+
     def _launcher_from_env(self) -> int | None:
         raw = os.environ.get(LAUNCHER_ENV, "").strip()
         if not raw:

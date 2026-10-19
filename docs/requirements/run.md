@@ -188,12 +188,19 @@ B10. "Some app failed" (exit 1) means: UNAVAILABLE, not RUNNING when
     app (a demo beat) is not a failure.
 
 
-## --sim through agents (step 4b): B11-B12 approved 8 Oct 2026 (decisions 1 and 3); B13 added while building, for approval
+## --sim through agents (step 4b): B11-B12 approved 8 Oct 2026 (decisions 1 and 3), B11 widened 19 Oct 2026 (robustness review); B13 added while building, for approval
 
-B11. `--sim` refuses if agents for this scenario's nodes already run on this
-     PC (from `agent.pid`), or if an agent for one of its nodes is heard here
-     on the same domain: sim agents would meet them over shared memory and one
-     would quit (N12 rule 2). The message says which, and how to stop them.
+B11. `--sim` refuses to start, saying what runs and how to stop it, when:
+     - `agent.pid` shows an agent for one of its nodes on this PC (sim agents
+       would meet it and one would quit, N12 rule 2). Started by `agent
+       start`: "`protorig agent stop <scenario>`". Started by another `run
+       --sim` (recorded in `agent.pid`): "press Ctrl-C there or close its
+       window" (`agent stop` refuses a node whose IP this PC hasn't). Start
+       time unreadable: names the `agent.pid` to delete if no agent runs.
+     - anything for this scenario's nodes already runs on this PC and domain:
+       any DDS participant named `<node>/<app>` (an agent of another
+       scenario, an app or twin started by hand, a `--live`), heartbeat or
+       not. Its data would mix with this run's. Offers `--domain N`.
 B12. Agents' lines (already labelled `node/app | ...` by the agent) are shown
      as they are; twins' lines get run's label. Blank lines (Connext's banner
      ends with some) are dropped.

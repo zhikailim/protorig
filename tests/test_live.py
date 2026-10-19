@@ -10,6 +10,7 @@ Every test works on a copy of the repo whose scenarios are built here:
 
 DDS tests use the shared test bus's domain, so they never meet a real rig.
 """
+import json
 import os
 import random
 import shutil
@@ -86,6 +87,9 @@ def rig(tmp_path):
     for rec in seen:                                            # no agent outlives its test
         if process_alive(rec.pid) and process_started(rec.pid) == rec.started:
             os.kill(rec.pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+    from fw.testing import leftovers
+    left = leftovers(root)
+    assert not left, "processes outlived this test:\n" + "\n".join(left)
 
 
 def scenario(root: Path, name: str, **nodes) -> None:
@@ -344,8 +348,8 @@ def test_start_resent_once_with_the_same_cmd_id(rig, bus, live_procs):
             w.write(T.NodeStatus(node="desk", app="node_agent"))
             time.sleep(0.3)
     threading.Thread(target=beat, daemon=True).start()
-    bus.writer("_sys/AppState").write(T.AppState(node="desk", app="node_agent", state=T.AppStateKind.APP_RUNNING,
-                                                 scenario=SCEN))
+    fake_row = T.AppState(node="desk", app="node_agent", state=T.AppStateKind.APP_RUNNING, scenario=SCEN)
+    bus.writer("_sys/AppState").write(fake_row)
     commands = bus.listen("_sys/DemoControl")
     try:
         p = live(rig, bus, live_procs)
@@ -369,6 +373,10 @@ def test_start_resent_once_with_the_same_cmd_id(rig, bus, live_procs):
         p.finish()
     finally:
         stop.set()
+        # The bus lives for the whole session and keeps rows for late joiners:
+        # left alone, this fake agent row would reach every later test's readers.
+        w = bus.writer("_sys/AppState")
+        w.dispose_instance(w.register_instance(fake_row))
 
 
 # --- refusals and B31 -------------------------------------------------------------------
@@ -429,8 +437,8 @@ def test_sim_refuses_rig_agents_of_this_scenario(rig, bus):
     out = subprocess.run([sys.executable, str(rig / "cli" / "main.py"), "run", SCEN, "--sim", "--domain", str(bus.domain)],
                          capture_output=True, text=True, encoding="utf-8", cwd=rig, timeout=60)
     assert out.returncode == 1, out.stdout
-    assert f"agents for this scenario already run on this PC (desk: process {pid})" in out.stdout
-    assert "protorig agent stop live-sample --node desk" in out.stdout
+    assert "agents for this scenario already run on this PC" in out.stdout
+    assert f"desk (process {pid}): stop it with `protorig agent stop live-sample`" in out.stdout, out.stdout
     assert process_alive(pid)                                     # left alone
 
 
@@ -440,8 +448,58 @@ def test_sim_refuses_an_agent_already_heard_here(rig, bus):
     start_agent(rig, bus, scen="other")
     out = subprocess.run([sys.executable, str(rig / "cli" / "main.py"), "run", SCEN, "--sim", "--domain", str(bus.domain)],
                          capture_output=True, text=True, encoding="utf-8", cwd=rig, timeout=60)
-    assert out.returncode == 1 and "an agent for desk already runs on this PC on domain" in out.stdout, out.stdout
+    assert out.returncode == 1 and f"already running on this PC on domain {bus.domain}: " in out.stdout, out.stdout
+    assert "desk/node_agent" in out.stdout and "--domain N" in out.stdout
     assert "Traceback" not in out.stdout + out.stderr
+
+
+def test_sim_unknown_pid_file_names_the_way_out(rig):
+    """B11: agent.pid naming a process whose start time can't be read (Windows,
+    after a reboot): refused, and the message says which file to delete."""
+    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        f = AgentFiles.of(rig, SCEN, "desk")
+        f.folder.mkdir(parents=True)
+        f.pid_file.write_text(json.dumps({"pid": other.pid, "started": None}), encoding="utf-8")
+        out = subprocess.run([sys.executable, str(rig / "cli" / "main.py"), "run", SCEN, "--sim"],
+                             capture_output=True, text=True, encoding="utf-8", cwd=rig, timeout=60)
+        assert out.returncode == 1 and f"delete {f.pid_file}" in out.stdout, out.stdout
+        assert other.poll() is None                               # never touched
+    finally:
+        other.kill()
+
+
+def test_sim_refuses_while_another_sim_runs(rig, bus, live_procs):
+    """B11: a second --sim. `agent stop` can't stop a sim agent of a node whose IP
+    isn't this PC's (far), so the message points at the run that started it."""
+    scenario(rig, "two", desk={**DESK, "run": ["probe"]}, far=FAR)
+    first = sim(rig, bus, live_procs, scen="two")
+    first.wait_for("far/probe RUNNING", timeout=30)
+    far = sim_agent_pid(rig, node="far", scen="two")
+    assert AgentFiles.of(rig, "two", "far").read_pid().launcher is not None
+    out = subprocess.run([sys.executable, str(rig / "cli" / "main.py"), "run", "two", "--sim", "--domain", str(bus.domain)],
+                         capture_output=True, text=True, encoding="utf-8", cwd=rig, timeout=60)
+    assert out.returncode == 1, out.stdout
+    assert f"far (process {far}): started by another `run two --sim` (process " in out.stdout, out.stdout
+    assert "protorig agent stop" not in out.stdout                # it would refuse: far's IP isn't this PC's
+    assert process_alive(far) and first.proc.poll() is None       # the first run is left alone
+    assert first.finish() == 0
+
+
+def test_sim_refuses_a_twin_left_running(rig, bus, live_procs):
+    """B11: not only agents. A twin started by hand would publish the ECU's data
+    next to the sim's twin, and displays would mix the two."""
+    from fw.supervise import Supervised
+    env = {**os.environ, "PYTHONPATH": str(rig / "libs" / "py")}
+    twin = Supervised([sys.executable, str(rig / "apps" / "sim" / "tc397_twin" / "main.py")],
+                      ["--node", "tc397", "--scenario", SCEN, "--domain", str(bus.domain)], env, watch_launcher=False)
+    try:
+        out = subprocess.run([sys.executable, str(rig / "cli" / "main.py"), "run", SCEN, "--sim", "--domain", str(bus.domain)],
+                             capture_output=True, text=True, encoding="utf-8", cwd=rig, timeout=60)
+        assert out.returncode == 1 and "tc397/tc397_twin" in out.stdout and "already running on this PC" in out.stdout, out.stdout
+        assert not twin.exited()                                  # left alone
+    finally:
+        twin.terminate(grace=5)
 
 
 def test_sim_machine_commands_reach_its_agents(rig, bus, live_procs):

@@ -119,7 +119,7 @@ class Agent:
         # agent.stop is how it asks. Written in the foreground too.
         self.files = AgentFiles.of(ROOT, a.scenario, a.node)
         try:
-            self.files.claim()
+            self.files.claim(launcher=a.launcher_pid)    # set by `run --sim`, None otherwise
         except OSError as e:
             log(a.who, "WARN", f"couldn't write {self.files.pid_file}: {e} (`protorig agent stop` won't find this agent)")
         a.every(STOP_CHECK_PERIOD, self.check_stop_request)

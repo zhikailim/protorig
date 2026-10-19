@@ -194,9 +194,10 @@ Everything stays on your PC. Stage 4 works exactly as on the rig. Ctrl-C
 stops everything, agents included.
 
 [available] The agents and twins run on your PC; Ctrl-C stops the apps
-through their agents, then the agents and twins. If you also started rig
-agents for the same scenario on this PC, `--sim` refuses and tells you how
-to stop them first.
+through their agents, then the agents and twins. If anything of this
+scenario already runs on this PC (rig agents, another `--sim`, a twin or app
+started by hand), `--sim` refuses and tells you how to stop it, or to use
+another `--domain`.
 
 
 ## 6. Reading the node board

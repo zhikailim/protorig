@@ -19,7 +19,8 @@ B28-B30; tests/test_agent_cli.py). Step 4 (8-16 Oct 2026): `run --live`
 - N1 (changed): `--node` optional, the node found from this machine's IP
   (run.md U13); `status` without a node shows every node. Approved 7 Oct
   2026, built 8 Oct 2026.
-- N1a (how `--background` start and `stop` work): approved 7 Oct 2026, built 8 Oct 2026.
+- N1a (how `--background` start and `stop` work): approved 7 Oct 2026, built 8 Oct 2026;
+  stale-file and launcher changes approved 19 Oct 2026 (robustness review of run.md B11).
 The bring-up flow these requirements produce is described in
 [../QUICKSTART.md](../QUICKSTART.md).
 
@@ -74,7 +75,7 @@ Files, in `build/<scenario>/<node>/` (git-ignored, this machine only):
 
 | File | Written by | Holds |
 |---|---|---|
-| `agent.pid` | the agent, at start | its process ID and the process's start time |
+| `agent.pid` | the agent, at start | its process ID, the process's start time, and the `run --sim` that launched it (none after `agent start`) |
 | `agent.stop` | `agent stop` | the process ID of the agent it wants stopped |
 | `agent.log` | the agent, with `--background` | its output |
 
@@ -88,7 +89,9 @@ Files, in `build/<scenario>/<node>/` (git-ignored, this machine only):
    stops cleanly (Ctrl-C or `stop`). A background agent doesn't
    watch the terminal that started it (N6 is for apps, not the agent).
 3. `stop`: reads `agent.pid`. No file, or that process isn't the agent any
-   more (not running, or its start time differs: the ID was reused):
+   more (not running, or its start time differs: the ID was reused; or,
+   on Windows, its start time can't be read but the agent started before
+   the last boot):
    "no agent running for <node>", removes the stale files, exit 0. Otherwise it
    writes `agent.stop` holding that PID, atomically (written to a temporary
    name, then renamed), so the agent never reads half a file.
@@ -101,8 +104,10 @@ Files, in `build/<scenario>/<node>/` (git-ignored, this machine only):
    printing progress. Still running: exit 1, "didn't stop: `agent stop
    --force` kills it".
 6. `stop --force` kills the process, but only if it is still the agent: its
-   start time must match the one in `agent.pid` (Linux and Windows; on any
-   other OS `--force` refuses and says to end it by hand). That guards
+   start time must match the one in `agent.pid` (Linux and Windows). When the
+   start time can't be read (no access to that process, or another OS),
+   `start`, `stop` and `--force` never act on it and name the `agent.pid` to
+   delete if no agent runs: never a dead end. That guards
    against a process ID reused by an unrelated program after the agent
    died. The killed agent's apps notice within about 1 s and stop
    themselves (N6 launcher watch); a hung app doesn't: its row shows "agent

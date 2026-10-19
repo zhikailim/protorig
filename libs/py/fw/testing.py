@@ -57,6 +57,42 @@ TEST_DOMAINS = range(60, 100)
 BEST_EFFORT_SETTLE = 0.3   # seconds; see Bus.send
 
 
+def leftovers(root: Path, grace: float = 5.0) -> list[str]:
+    """Processes still running from a test's scratch copy of the repo after its
+    clean-up, given `grace` seconds to end (apps stop ~1 s after their launcher).
+    Each is killed and returned ("pid: command line"), so a test that leaks one
+    fails by name instead of disturbing a later test. Linux only: Windows has no
+    /proc to scan, so there it returns [] (the clean-up itself still runs)."""
+    proc = Path("/proc")
+    if not proc.is_dir():
+        return []
+    mark = str(root)
+
+    def scan() -> dict[int, str]:
+        found = {}
+        for d in proc.iterdir():
+            if d.name.isdigit() and int(d.name) != os.getpid():
+                try:
+                    cmd = (d / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+                except OSError:
+                    continue                           # ended meanwhile
+                if mark in cmd:
+                    found[int(d.name)] = cmd
+        return found
+
+    end = time.monotonic() + grace
+    found = scan()
+    while found and time.monotonic() < end:
+        time.sleep(0.2)
+        found = scan()
+    for pid in found:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    return [f"{pid}: {cmd}" for pid, cmd in found.items()]
+
+
 def wait_for(condition, timeout: float, what: str = "condition", poll: float = 0.02):
     """Wait until condition() is true, or fail with a readable message."""
     deadline = time.monotonic() + timeout

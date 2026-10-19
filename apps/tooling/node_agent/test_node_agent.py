@@ -105,7 +105,7 @@ class Rows:
         while not self._stop.is_set():
             try:
                 for data, info in self.r.take():
-                    if info.valid:
+                    if info.valid and data.node == "pi":     # the session bus may carry other tests' rows
                         self.rows[data.app] = data
                         self._h[info.instance_handle] = data.app
                     app = self._h.get(info.instance_handle)

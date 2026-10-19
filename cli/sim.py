@@ -32,7 +32,8 @@ from fw.app import NODE_QOS_ENV               # noqa: E402
 from fw.supervise import Supervised           # noqa: E402
 
 AGENT = "node_agent"
-CHECK = 2.0             # seconds to listen for agents that already run here
+CHECK = 2.0             # seconds to listen for anything of this scenario already running here
+PASSING = {"agent_start", "agent_status"}   # short-lived CLI listeners, not a running demo
 STOP_GRACE = 10.0       # for agents and twins after their apps were stopped (agents need their own grace)
 
 
@@ -94,13 +95,19 @@ def main(args, data: dict, common: list[str], env: dict) -> int:
     for n in managed:
         files = AgentFiles.of(repo.ROOT, scenario, n)
         rec = files.read_pid()
-        if files.identity(rec) != "gone":
-            busy.append((n, rec.pid))
+        ident = files.identity(rec)
+        if ident == "unknown":
+            busy.append(f"{n}: {files.unknown_hint(rec.pid)}")
+        elif ident == "agent" and rec.launcher is not None:
+            # Another --sim's agent. `agent stop` would refuse it (its node's IP
+            # isn't this PC's); it stops with the run that started it.
+            busy.append(f"{n} (process {rec.pid}): started by another `run {scenario} --sim` "
+                        f"(process {rec.launcher}); press Ctrl-C there or close its window")
+        elif ident == "agent":
+            busy.append(f"{n} (process {rec.pid}): stop it with `protorig agent stop {scenario}`")
     if busy:
-        stops = "; ".join(f"protorig agent stop {scenario} --node {n}" for n, _ in busy)
-        raise RunError("agents for this scenario already run on this PC ("
-                       + ", ".join(f"{n}: process {pid}" for n, pid in busy)
-                       + f"). Sim agents would meet them and one would quit. Stop them first: {stops}")
+        raise RunError("agents for this scenario already run on this PC; sim agents would meet them "
+                       "and one would quit:\n  " + "\n  ".join(busy))
 
     settings_text = discovery.sim_qos()
     settings_path = repo.ROOT / "build" / scenario / "_sim" / "node_qos.xml"
@@ -133,11 +140,18 @@ def main(args, data: dict, common: list[str], env: dict) -> int:
     rig = agentcmd.open_listener(domain, settings_path, "sim/run", cls=livemod.Rig)
     procs: dict[str, Supervised] = {}
     try:
-        # 1b. Any agent for these nodes already heard here (e.g. another scenario on this domain).
-        if agentcmd.wait_for(lambda: bool(rig.agents() & set(managed)), CHECK):
-            here = sorted(rig.agents() & set(managed))
-            raise RunError(f"an agent for {', '.join(here)} already runs on this PC on domain {domain} "
-                           "(another scenario, or another run): sim agents would meet it. Stop it first")
+        # 1b. Anything for this scenario's nodes already on this PC and domain (an
+        # agent of another scenario, an app or twin started by hand, a --live):
+        # its data would mix with this run's, and a same-named agent would meet ours.
+        def here() -> list[str]:
+            return [p for p in rig.peers()
+                    if p.split("/", 1)[0] in data["nodes"] and p.split("/", 1)[-1] not in PASSING]
+        if agentcmd.wait_for(lambda: bool(here()), CHECK):
+            time.sleep(0.5)                               # let the rest be heard, for the message
+            raise RunError(f"already running on this PC on domain {domain}: {', '.join(here())}. "
+                           "Its data would mix with this run's. Stop it first (Ctrl-C the run that "
+                           "started it, or `protorig agent stop <scenario>`), or use another "
+                           "domain: --domain N")
 
         # 2. Agents and twins, each watching this run (N6): if run dies, they stop.
         console = SimConsole(max([len("run")] + [len(l.who) for l in twins if l.cmd]))

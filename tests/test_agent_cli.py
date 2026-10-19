@@ -65,6 +65,9 @@ def rig(tmp_path):
     for rec in seen:
         if process_alive(rec.pid) and process_started(rec.pid) == rec.started:
             os.kill(rec.pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+    from fw.testing import leftovers
+    left = leftovers(root)
+    assert not left, "processes outlived this test:\n" + "\n".join(left)
 
 
 seen: list[PidRecord] = []          # every agent the current test started (see the rig fixture)
@@ -139,6 +142,15 @@ def test_status_without_agents(rig, bus):
     st = agent(rig, "status", SCEN, "--domain", str(bus.domain))
     assert st.returncode == 1
     assert "desk: agent MISSING" in st.stdout and "far: agent MISSING" in st.stdout
+
+
+def test_status_always_shows_the_rows(rig, bus):
+    """Each `status` is a late joiner: the agent's rows reach it just after its
+    heartbeat. It must wait for them, never print "no apps" for a node with apps."""
+    start_bg(rig, bus)
+    for _ in range(5):
+        st = agent(rig, "status", SCEN, "--node", "desk", "--domain", str(bus.domain))
+        assert st.returncode == 0 and "desk: agent alive\n    probe  NOT_RUNNING" in st.stdout, st.stdout
 
 
 def test_second_start_refused_on_this_machine(rig, bus):
@@ -254,7 +266,13 @@ def test_force_refuses_when_start_time_cant_be_compared(rig):
         f.folder.mkdir(parents=True)
         f.pid_file.write_text(json.dumps({"pid": other.pid, "started": None}), encoding="utf-8")
         out = agent(rig, "stop", SCEN, "--force")
-        assert out.returncode == 1 and "can't confirm process" in out.stdout and "isn't killed" in out.stdout, out.stdout
+        assert out.returncode == 1 and "not killed: can't tell whether process" in out.stdout, out.stdout
+        assert f"delete {f.pid_file}" in out.stdout                # the way out (no dead end)
+        assert other.poll() is None
+        out = agent(rig, "start", SCEN, "--background")
+        assert out.returncode == 1 and "may already be running" in out.stdout and f"delete {f.pid_file}" in out.stdout, out.stdout
+        out = agent(rig, "stop", SCEN, timeout=60)                  # asks, waits the grace, then the way out
+        assert out.returncode == 1 and "no agent stopped within 15 s" in out.stdout and f"delete {f.pid_file}" in out.stdout, out.stdout
         assert other.poll() is None
     finally:
         other.kill()
@@ -495,6 +513,28 @@ def test_identity_rules(tmp_path):
     assert f.identity(PidRecord(p.pid, 5)) == "gone"
 
 
+def test_unknown_start_time_before_this_boot_is_gone(tmp_path, monkeypatch):
+    """After a reboot Windows may give the agent's old PID to a system process
+    whose start time can't be read: that file is stale, not a running agent."""
+    import fw.agentfiles as af
+    f, me, boot = AgentFiles(tmp_path), os.getpid(), 10**15
+    monkeypatch.setattr(af, "process_started", lambda pid: None)      # no access to that process
+    monkeypatch.setattr(af, "boot_filetime", lambda: boot)
+    assert f.identity(PidRecord(me, boot - af.BOOT_SLACK - 1)) == "gone"   # started before this boot
+    assert f.identity(PidRecord(me, boot - af.BOOT_SLACK + 1)) == "unknown"  # this boot: can't tell
+    assert f.identity(PidRecord(me, None)) == "unknown"
+    monkeypatch.setattr(af, "boot_filetime", lambda: None)              # not Windows: no boot rule
+    assert f.identity(PidRecord(me, 1)) == "unknown"
+
+
+def test_boot_filetime():
+    from fw.agentfiles import boot_filetime
+    if os.name == "nt":
+        assert 0 < boot_filetime() < process_started(os.getpid())     # same units as process start times
+    else:
+        assert boot_filetime() is None
+
+
 def test_claim_release_and_stop_request(tmp_path):
     f = AgentFiles(tmp_path / "build" / "s" / "n")
     f.claim()
@@ -507,17 +547,24 @@ def test_claim_release_and_stop_request(tmp_path):
     f.release()
     assert not f.pid_file.exists()
     assert not list(f.folder.glob("*.tmp")), "atomic writes leave no temporary files"
+    f.claim(launcher=777)                                       # a --sim agent records its run
+    assert f.read_pid().launcher == 777
+    for junk in (-1, 0, True, "12", 2**40, None, [1]):
+        f.pid_file.write_text(json.dumps({"pid": os.getpid(), "started": 5, "launcher": junk}), encoding="utf-8")
+        assert f.read_pid() == PidRecord(os.getpid(), 5, None)
 
 
 def test_fuzz_file_readers(tmp_path):
     f = AgentFiles(tmp_path)
     rnd = random.Random(5)
-    pieces = [b"{", b"}", b'"pid"', b":", b"12", b"-3", b"null", b'"started"', b",", b"\x00", b"\xff", b" ", b"\n", b"1e9"]
+    pieces = [b"{", b"}", b'"pid"', b":", b"12", b"-3", b"null", b'"started"', b'"launcher"', b"[", b"]", b",",
+              b"\x00", b"\xff", b" ", b"\n", b"1e9"]
     for _ in range(3000):
         blob = b"".join(rnd.choice(pieces) for _ in range(rnd.randint(0, 12)))
         f.pid_file.write_bytes(blob)
         f.stop_file.write_bytes(blob)
         rec = f.read_pid()
         assert rec is None or (isinstance(rec.pid, int) and 0 < rec.pid <= 0xFFFFFFFF)
+        assert rec is None or rec.launcher is None or 0 < rec.launcher <= 0xFFFFFFFF
         req = f.stop_request()
         assert req == -1 or (isinstance(req, int) and 0 < req <= 0xFFFFFFFF)

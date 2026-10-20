@@ -1,7 +1,7 @@
 """
 run.py — `protorig run`: start a scenario, one node of it, or one app (U1-U13).
 
-    protorig run [--scenario S] [--domain N] --app <app> [its own arguments]
+    protorig run [<scenario>] [--domain N] --app <app> [its own arguments]
                                                  one app on this machine, to try it (U1)
     protorig run <scenario> --sim                whole scenario on this machine, twins included (U2, U3)
     protorig run <scenario> [--node <node>]      this machine's part of the real rig (U4, U5):

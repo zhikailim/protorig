@@ -459,7 +459,7 @@ def test_license_in_local_reaches_every_started_process(rig, given):
     env = {k: v for k, v in os.environ.items() if k != "RTI_LICENSE_FILE"}
     if given:
         env["RTI_LICENSE_FILE"] = "/somewhere/else.dat"
-    out = subprocess.run([sys.executable, str(rig / "cli" / "main.py"), "run", "--scenario", SCEN, "--app", "probe"],
+    out = subprocess.run([sys.executable, str(rig / "cli" / "main.py"), "run", SCEN, "--app", "probe"],
                          capture_output=True, text=True, encoding="utf-8", cwd=rig, env=env, timeout=60)
     expected = "/somewhere/else.dat" if given else str(lic)
     assert f"LICENSE={expected}" in out.stdout, out.stdout + out.stderr

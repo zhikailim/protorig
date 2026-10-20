@@ -20,9 +20,11 @@ part (or --live brings every machine up through its agent).
 
 ## Approved and built (29 Sep 2026)
 
-U1. `protorig run [--scenario S] [--domain N] --app <app> [its arguments]`
+U1. `protorig run [<scenario>] [--domain N] --app <app> [its arguments]`
     starts one app on this machine, for trying it out. Domain: `--domain`
-    if given, else the scenario's if `--scenario` is given, else 0.
+    if given, else the scenario's if one is given, else 0. (CHANGED 20 Oct
+    2026: the scenario comes first, as in every other mode; the `--scenario`
+    switch is gone.)
 
 U2. `protorig run <scenario> --sim` starts every node's apps on this
     machine, plus each external node's twin (e.g. `tc397_twin` in place of

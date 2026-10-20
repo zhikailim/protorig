@@ -19,7 +19,7 @@ Run from the repo root. Linux: `./protorig <verb>`. Windows: `.\protorig.ps1 <ve
 | `./protorig test [<app>] [-k <name>]` | Check, then tests (all or one app) |
 | `./protorig test --all` | Adds scenario tests and full fuzzing (planned, not built yet) |
 | `./protorig run <scenario> --sim` | Whole scenario on one machine, twins for external nodes |
-| `./protorig run --app <app> [args]` | One app alone, for trying it out |
+| `./protorig run [<scenario>] --app <app> [args]` | One app alone, for trying it out (the scenario sets its domain) |
 | `./protorig new app <name> --kind tooling\|sim` / `new scenario <name>` | Create from a template (`--kind vehicle` needs the C++ template, not built yet) |
 
 `./protorig --help` marks verbs not built yet (today: `build`, `preflight`, `send`, `gen`, `deploy`).

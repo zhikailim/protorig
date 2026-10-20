@@ -234,7 +234,7 @@ Launchers find the repo's Python environment and the Connext license, then hand 
 | `./protorig preflight <scenario>` | Every real node up and discovered? |
 | `./protorig new app\|scenario <name>` | Create from a template (`--kind`, `--desc`, `--scenario`) |
 | `./protorig lock <external> [--add IDL] [--dry-run]` | Record the IDL fingerprints of what was just flashed |
-| `./protorig run [--scenario S] [--domain N] --app <app> [its arguments]` | Just one app on this machine, for trying it out; everything after the app's name goes to the app |
+| `./protorig run [<scenario>] [--domain N] --app <app> [its arguments]` | Just one app on this machine, for trying it out; everything after the app's name goes to the app |
 | `./protorig run ... --dry-run` | Show what would start (commands, discovery settings); start nothing |
 | `./protorig send <Topic> '<json>'` | Publish one sample from the command line |
 | `./protorig test [<app>] [--all] [-k <name>]` | Run automated tests (all, one app's, or matching a name); `--all` adds scenario tests and full fuzzing |

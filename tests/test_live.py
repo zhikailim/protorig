@@ -313,7 +313,7 @@ def test_agent_lost_and_back(rig, bus, live_procs):
 
 
 def test_external_device_seen(rig, bus, live_procs):
-    twin = subprocess.Popen([sys.executable, str(rig / "cli" / "main.py"), "run", "--scenario", SCEN,
+    twin = subprocess.Popen([sys.executable, str(rig / "cli" / "main.py"), "run", SCEN,
                              "--domain", str(bus.domain), "--app", "tc397_twin"],
                             stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, cwd=rig,
                             **({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"

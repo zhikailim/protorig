@@ -150,7 +150,7 @@ def test_dry_run_node_shows_discovery_settings(rig):
 
 def test_app_arguments_go_to_the_app(rig):
     """Everything after --app <name> is the app's, even words that look like run's own."""
-    o = protorig(rig, "run", "--scenario", SAMPLE, "--dry-run", "--app", "probe", "--label", "hello", "--sim", "x").stdout
+    o = protorig(rig, "run", SAMPLE, "--dry-run", "--app", "probe", "--label", "hello", "--sim", "x").stdout
     assert "would start 1 app(s)" in o and "--label hello --sim x" in o, o
 
 
@@ -439,7 +439,7 @@ def test_app_mode(rig, bus):
     """U1: one app, its own arguments passed through, node 'local'."""
     from fw.testing import wait_for
     beats = bus.listen("_sys/NodeStatus")
-    run = RunProcess(rig, "--scenario", SAMPLE, "--domain", str(bus.domain), "--app", "probe", "--label", "hello")
+    run = RunProcess(rig, SAMPLE, "--domain", str(bus.domain), "--app", "probe", "--label", "hello")
     try:
         wait_for(lambda: any(b.app == "probe" and b.node == "local" for b in beats.all()), 15, "the probe")
         wait_for(lambda: "LABEL=hello" in run.output, 5, "its argument")

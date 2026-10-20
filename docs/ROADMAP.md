@@ -14,7 +14,7 @@ approved, waits for an earlier row) · **Planned** (designed, requirements not
 written yet) · **Waits** (deferred until its trigger happens) · **Decide**
 (an open decision, usually at bring-up).
 
-Status: 16 Oct 2026.
+Status: 20 Oct 2026.
 
 
 ## 1. Next, in build order
@@ -51,7 +51,6 @@ Status: 16 Oct 2026.
 | 19 | `test --all` | Scenario tests and full fuzzing in one command | Planned | CLAUDE.md commands |
 | 20 | `protorig send` | Publish one sample from the command line | Planned | WORKFLOW CLI table |
 | 21 | `protorig gen` | QoS as generated C for Micro and Cert apps | Planned | WORKFLOW `qos/` |
-| 22 | Agents start at boot | No `agent start` on demo day | Planned | QUICKSTART stage 2 |
 
 
 ## 4. Waiting for a trigger
@@ -68,10 +67,16 @@ Status: 16 Oct 2026.
 | 30 | Machine CPU and memory on the node board | Load per machine | Needed by a demo (no QNX support in `psutil`) | WORKFLOW "Deferred on purpose" |
 | 31 | Forwarding app output (`_sys/AppLog`) | See a Pi app's output on Windows, no SSH | Needed during a demo | WORKFLOW "Deferred on purpose" |
 | 32 | Cross-compilation: toolchain files, `build --target`, `deploy` | Build on a host, deploy to targets (QNX later) | A target that can't build for itself | WORKFLOW "Cross-compilation support" |
+| 22 | Agents start at boot | No walking to each machine on demo day; with 33 and 35, demo day is one command | After the first rig bring-up (row 13), if starting agents by hand hurts | QUICKSTART stage 2 |
+| 33 | `run <scenario>` brings the rig up (today's `--live`); drop the no-agent mode | The everyday command is the shortest; one way to bring the rig up | After the first rig bring-up (row 13), if `--live` feels cumbersome | Usability audit 20 Oct 2026; run.md U4, U11 |
+| 34 | Remove `--partial` and `--start-timeout` (`run` keeps waiting and names the missing agent) | Two fewer switches | After the first rig bring-up (row 13) | Usability audit 20 Oct 2026; run.md U11, B8-B10 |
+| 35 | `agent start` in the background by default (`--foreground` to debug) | Demo day is the common case | After the first rig bring-up (row 13) | Usability audit 20 Oct 2026; node_agent.md N1a |
+| 36 | One home per doc topic: QUICKSTART for running, WORKFLOW for building; the design doc links instead of restating; the adas-failover example moved out of QUICKSTART | Less to read; docs stop drifting apart | Before handing the repo to anyone else | Usability audit 20 Oct 2026 |
 
 
 ## Done
 
+- 20 Oct 2026: robustness review of `--sim` (B11 widened, B13 approved), a simplify pass, reporting and "simple to use" rules in CLAUDE.md; `run <scenario> --app X` replaces `run --scenario <scenario> --app X`.
 - 16 Oct 2026: `run --sim` through agents (step 4b, row 3): one agent per node on this PC, the same start/watch/stop as `--live`.
 - 8 Oct 2026: `run <scenario> --live` (step 4a): the whole rig up through its agents with one command (U11, U12); agents skip `node_agent` in `run:` (B31), removed from temperature-skeleton.
 - 8 Oct 2026: `protorig agent start|stop|status` (step 3b, row 2): background start, stop through a PID-checked file, status of every node (N1, N1a).

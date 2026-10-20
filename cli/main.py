@@ -78,7 +78,7 @@ def main(argv=None) -> int:
                                     "or one app: run's options first, then --app <name>, "
                                     "then the app's own arguments, e.g. "
                                     "protorig run --domain 5 --app my_gui --threshold 14.5. Ctrl-C stops everything.")
-    rn.add_argument("scenario_name", nargs="?", metavar="scenario", help="the scenario (alone: this machine's part of it)")
+    rn.add_argument("scenario", nargs="?", help="the scenario (alone: this machine's part of it; with --app: its domain)")
     rn.add_argument("--sim", action="store_true", help="the whole scenario on this machine, twins for external nodes; "
                                                        "nothing reaches the network")
     rn.add_argument("--node", help="name the node yourself (only needed on a machine with the IPs of two nodes)")
@@ -88,7 +88,6 @@ def main(argv=None) -> int:
     rn.add_argument("--start-timeout", type=float, metavar="SECONDS",
                     help="with --live: flag apps not RUNNING after this long (default 20)")
     rn.add_argument("--app", help="just this app; everything after its name goes to the app")
-    rn.add_argument("--scenario", dest="scenario_opt", metavar="SCENARIO", help="with --app: use this scenario's domain")
     rn.add_argument("--domain", type=int, help="override the DDS domain")
     rn.add_argument("--dry-run", action="store_true", help="show what would start, start nothing")
     ag = sub.add_parser("agent", help="Start, stop or check the node agents (one per rig machine)",
@@ -133,7 +132,6 @@ def main(argv=None) -> int:
         return test.main(args)
     if args.verb == "run":
         import run
-        args.scenario = args.scenario_name or args.scenario_opt
         return run.main(args, extra, app_args)
     if args.verb == "agent":
         import agent

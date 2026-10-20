@@ -52,6 +52,8 @@ Before asking the reviewer to review anything, check it yourself and fix what yo
 - **Traceability:** challenge -> beat -> proof point -> acceptance test -> test code line up.
 - **Impact:** does each part make the demo more convincing? Remove what does not.
 - **Simplicity:** can anything be removed without weakening the story?
+- **Simple to use:** everything a person touches (commands, switches, messages, files they edit, GUIs, docs) is as simple and intuitive as possible. Check every fix you design or recommend, not just finished work: does it add something the user must learn, type, read or remember? Prefer detection and good defaults over switches, one way to do each thing, and say what the fix removes or replaces.
+- **Simplify pass:** at the end of every step, list what it added (code, rules, switches, messages) and propose what to remove, merge or redesign, before asking to merge. Fixes pile up unless removed on purpose.
 - **Fits the repo:** naming conventions, folder rules, `./protorig check` passes.
 - **Runs:** for code, `./protorig test` passes, with no DDS tests skipped.
 

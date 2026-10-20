@@ -79,9 +79,13 @@ class SimLive(livemod.Live):
             if who not in self.reported and p.exited():
                 self.reported.add(who)
                 self.failed.add(who)
-                livemod.say(f"{who} ended by itself: {describe_exit(p.returncode)}")
+                hint = ""
                 if who.endswith("/" + AGENT):
-                    self.give_up = True               # an agent that died won't come up: stop waiting
+                    if self.alive:                    # mid-demo: the other nodes carry on (B13)
+                        hint = ". Its apps stopped with it; Ctrl-C and run again to bring it back"
+                    else:
+                        self.give_up = True           # at start: it won't come up, stop waiting
+                livemod.say(f"{who} ended by itself: {describe_exit(p.returncode)}{hint}")
 
 
 def main(args, data: dict, common: list[str], env: dict) -> int:

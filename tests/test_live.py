@@ -541,6 +541,22 @@ def test_sim_agent_that_dies_at_start(rig, bus, live_procs):
     assert "didn't come up" in p.output
     assert "tc397/tc397_twin stopped" in p.output                    # the twin is stopped too
     assert "desk/node_agent stopped" not in p.output                 # it crashed by itself: never relabelled
+    assert "run again to bring it back" not in p.output             # at start, run stops everything itself
+
+
+def test_sim_agent_that_dies_mid_demo(rig, bus, live_procs):
+    """B13: the dead agent's node is reported with the way back; the others carry on."""
+    scenario(rig, "two", desk={**DESK, "run": ["probe"]}, far=FAR)
+    p = sim(rig, bus, live_procs, scen="two")
+    p.wait_for("far/probe RUNNING", timeout=30)
+    p.wait_for("desk/probe RUNNING", timeout=30)
+    os.kill(sim_agent_pid(rig, node="far", scen="two"), getattr(signal, "SIGKILL", signal.SIGTERM))
+    p.wait_for("far/node_agent ended by itself: ")
+    p.wait_for("Its apps stopped with it; Ctrl-C and run again to bring it back")
+    time.sleep(2)
+    assert p.proc.poll() is None                                  # run carries on with desk
+    assert "desk/probe STOPPED" not in p.output and "desk/probe CRASHED" not in p.output
+    assert p.finish() == 1                                        # a node was lost: reported as a failure
 
 
 def test_sim_second_ctrl_c_leaves_and_everything_stops(rig, bus, live_procs):

@@ -188,7 +188,7 @@ B10. "Some app failed" (exit 1) means: UNAVAILABLE, not RUNNING when
     app (a demo beat) is not a failure.
 
 
-## --sim through agents (step 4b): B11-B12 approved 8 Oct 2026 (decisions 1 and 3), B11 widened 19 Oct 2026 (robustness review); B13 added while building, for approval
+## --sim through agents (step 4b): B11-B12 approved 8 Oct 2026 (decisions 1 and 3), B11 widened 19 Oct 2026 (robustness review); B13 approved 20 Oct 2026
 
 B11. `--sim` refuses to start, saying what runs and how to stop it, when:
      - `agent.pid` shows an agent for one of its nodes on this PC (sim agents
@@ -208,3 +208,6 @@ B13. An agent that ends by itself is reported at once, and `--sim` stops
      waiting for it; a process stopped by Ctrl-C within 5 s of its start is
      reported as stopped, not crashed, whatever its exit code (Ctrl-C during
      Python's imports gives exit 1). Applies to `run --node`/`--app` too.
+     An agent that ends by itself mid-demo is reported with the hint "Its
+     apps stopped with it; Ctrl-C and run again to bring it back"; the other
+     nodes carry on.

@@ -7,11 +7,8 @@ is built here, so no test depends on a real demo.
 Node "pi" runs one small probe app under several names, each misbehaving in
 its own way through its run: arguments.
 """
-import os
 import random
 import shutil
-import signal
-import subprocess
 import sys
 import threading
 import time
@@ -24,6 +21,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 dds = pytest.importorskip("rti.connextdds")
 from fw import types as T          # noqa: E402
+from fw.app import DDS_ERRORS      # noqa: E402
 from fw.testing import wait_for    # noqa: E402
 
 SCEN = "agent-sample"
@@ -34,7 +32,7 @@ PI_RUN = ["mon", "worker --crash-after 1", "quiet --no-heartbeat", "stubborn --i
           f"uni --crash-after 1 --crash-text '{UNI}'", "missing_app", "cpp_thing"]
 PROBE = '''import sys, time
 from pathlib import Path
-from fw.app import DDS_ERRORS, App
+from fw.app import App
 name = Path(__file__).resolve().parent.name
 no_beat = "--no-heartbeat" in sys.argv
 app = App(name, "agent test probe", heartbeat=not no_beat)

@@ -23,7 +23,6 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 
 import discovery
 import repo

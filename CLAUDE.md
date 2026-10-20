@@ -55,7 +55,16 @@ Before asking the reviewer to review anything, check it yourself and fix what yo
 - **Fits the repo:** naming conventions, folder rules, `./protorig check` passes.
 - **Runs:** for code, `./protorig test` passes, with no DDS tests skipped.
 
-Then present: what is ready for review, what you checked and fixed, open questions. Show evidence: the commands you ran and their key output, not just "tests pass". Short.
+Then report as below.
+
+## Reporting to the reviewer
+
+The reviewer's attention is the scarce resource: AI output outgrows what one person can check, and tired approvals slip through.
+
+- **One screen.** What changed, the evidence in one line (commands run and key numbers, not just "tests pass"), then what needs the reviewer.
+- **Label every decision:** *safe to approve* (easy to undo, tested) or *think about this* (hard to undo, or a design choice).
+- **One question at a time.** Everything else waits in a short "Queued" list.
+- **Plain words.** Explain any term or rule ID the reviewer may not remember.
 
 ## Coding rules
 

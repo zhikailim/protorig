@@ -20,7 +20,7 @@ B28-B30; tests/test_agent_cli.py). Step 4 (8-16 Oct 2026): `run --live`
   (run.md U13); `status` without a node shows every node. Approved 7 Oct
   2026, built 8 Oct 2026.
 - N1a (how `--background` start and `stop` work): approved 7 Oct 2026, built 8 Oct 2026;
-  stale-file and launcher changes approved 19 Oct 2026 (robustness review of run.md B11).
+  launcher field and "delete agent.pid" hint approved 19 Oct 2026 (robustness review of run.md B11).
 The bring-up flow these requirements produce is described in
 [../QUICKSTART.md](../QUICKSTART.md).
 
@@ -89,9 +89,7 @@ Files, in `build/<scenario>/<node>/` (git-ignored, this machine only):
    stops cleanly (Ctrl-C or `stop`). A background agent doesn't
    watch the terminal that started it (N6 is for apps, not the agent).
 3. `stop`: reads `agent.pid`. No file, or that process isn't the agent any
-   more (not running, or its start time differs: the ID was reused; or,
-   on Windows, its start time can't be read but the agent started before
-   the last boot):
+   more (not running, or its start time differs: the ID was reused):
    "no agent running for <node>", removes the stale files, exit 0. Otherwise it
    writes `agent.stop` holding that PID, atomically (written to a temporary
    name, then renamed), so the agent never reads half a file.

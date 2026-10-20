@@ -29,7 +29,6 @@ from pathlib import Path
 from fw.supervise import process_alive
 
 MAX_FILE = 4096           # bytes read from any of these files; a bigger one is garbage
-BOOT_SLACK = 60 * 10_000_000   # 60 s in FILETIME units: clock adjustments since boot
 
 
 def process_started(pid: int) -> int | None:
@@ -93,21 +92,6 @@ def _read_small(path: Path) -> str | None:
     if len(raw) > MAX_FILE:
         return None
     return raw.decode("utf-8", errors="replace")
-
-
-def boot_filetime() -> int | None:
-    """When this machine booted, in the units process_started gives on Windows
-    (FILETIME: 100 ns since 1601). None elsewhere: there, an unreadable start
-    time doesn't happen in practice (Linux /proc is readable by all)."""
-    if os.name != "nt":
-        return None
-    import ctypes
-    from ctypes import wintypes
-    k32 = ctypes.WinDLL("kernel32")
-    k32.GetTickCount64.restype = ctypes.c_ulonglong
-    ft = wintypes.FILETIME()
-    k32.GetSystemTimeAsFileTime(ctypes.byref(ft))
-    return ((ft.dwHighDateTime << 32) | ft.dwLowDateTime) - k32.GetTickCount64() * 10_000
 
 
 def _write_atomic(path: Path, text: str) -> None:
@@ -196,12 +180,7 @@ class AgentFiles:
             return "unknown"
         now = process_started(rec.pid)
         if now is None:
-            # Not readable: e.g. after a reboot Windows gave that PID to a system
-            # process. An agent that started before this boot can't still run.
-            boot = boot_filetime()
-            if boot is not None and rec.started < boot - BOOT_SLACK:
-                return "gone"
-            return "unknown"
+            return "unknown"           # e.g. after a reboot Windows gave that PID to a system process
         return "agent" if now == rec.started else "gone"
 
     # --- agent.stop -----------------------------------------------------------

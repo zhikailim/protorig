@@ -33,7 +33,6 @@ from fw.supervise import Supervised           # noqa: E402
 
 AGENT = "node_agent"
 CHECK = 2.0             # seconds to listen for anything of this scenario already running here
-PASSING = {"agent_start", "agent_status"}   # short-lived CLI listeners, not a running demo
 STOP_GRACE = 10.0       # for agents and twins after their apps were stopped (agents need their own grace)
 
 
@@ -148,8 +147,7 @@ def main(args, data: dict, common: list[str], env: dict) -> int:
         # agent of another scenario, an app or twin started by hand, a --live):
         # its data would mix with this run's, and a same-named agent would meet ours.
         def here() -> list[str]:
-            return [p for p in rig.peers()
-                    if p.split("/", 1)[0] in data["nodes"] and p.split("/", 1)[-1] not in PASSING]
+            return [p for p in rig.peers() if p.split("/", 1)[0] in data["nodes"]]
         if agentcmd.wait_for(lambda: bool(here()), CHECK):
             time.sleep(0.5)                               # let the rest be heard, for the message
             raise RunError(f"already running on this PC on domain {domain}: {', '.join(here())}. "

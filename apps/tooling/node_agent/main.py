@@ -23,7 +23,6 @@ import threading
 import time
 from pathlib import Path
 
-import rti.connextdds as dds
 
 from fw.app import DDS_ERRORS, App, ROOT, VARIANT_LIBRARY, log
 from fw import scenario as fw_scenario

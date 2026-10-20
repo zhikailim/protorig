@@ -6,3 +6,4 @@
 rti.connext~=7.7.0
 pyyaml>=6
 pytest>=8
+pyflakes>=3           # `protorig check`: undefined names in Python code

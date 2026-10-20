@@ -177,7 +177,7 @@ Verified against real Connext: each topic gets the intended QoS in every profile
   - **ERROR** if any profile's readers of an external topic would not match what the external node offers (`external/<name>/external.yaml`). For the TC397 (reliable, volatile, no deadline, no liveliness lease), readers must not request a finite deadline, a finite liveliness lease, a stronger durability, or different ownership.
   - **ERROR** if the default writer for an external topic doesn't mirror the external node's offer, so sim twins behave like the hardware.
   - **ERROR** if our own topics' writer and reader don't match within a profile.
-  - **WARN** if a variant only works when applied to every node at once (e.g. `Variant.Alert.BestEffort`: its best-effort writer can't feed default reliable readers).
+  - **ERROR** if a variant would stop data flowing: a switch changes one app, so a variant's writers must still feed default readers, and its readers must still match default writers (node_agent V8). That's why `Variant.Alert.BestEffort` is reader-side only.
   - A test checks the checker: for several reader settings, its verdict must equal whether real Connext matches on the wire.
 - XML comments may not contain `--`; check reports invalid XML.
 
@@ -426,7 +426,7 @@ scenarios/<name>/test_<name>.py     # each scenario, from its README's acceptanc
 
 | Level | Proves | Where it runs |
 |---|---|---|
-| 1. Static checks (`./protorig check`) | Rules: YAML, language policy, naming, IDL ↔ Python match, unique IDL names, flash locks, QoS compatible with external nodes | Anywhere, seconds, no DDS |
+| 1. Static checks (`./protorig check`) | Rules: YAML, language policy, naming, IDL ↔ Python match, unique IDL names, flash locks, QoS compatible with external nodes and default peers, undefined names in Python | Anywhere, seconds, no DDS |
 | 2. Framework tests | Templates create/build/heartbeat; generated `node_qos.xml` correct; `fw` helpers | Anywhere |
 | 3. App tests | The app does what its header comment promises | Anywhere |
 | 4. Scenario tests | README acceptance criteria, with injected faults, in `--sim` | Anywhere |

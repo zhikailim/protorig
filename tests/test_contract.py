@@ -34,7 +34,7 @@ def _test_domain() -> int:
     return random.choice(TEST_DOMAINS)
 import repo            # noqa: E402
 
-EXPECTED_BASELINE_WARNINGS = {"not locked", "Variant.Alert.BestEffort: switch 'Alert' publishers together"}
+EXPECTED_BASELINE_WARNINGS = {"not locked"}
 
 
 @pytest.fixture
@@ -456,3 +456,23 @@ def test_python_types_work_on_the_wire():
             assert got and got[0] == sample, f"{name}: sent {sample}, got {got}"
     finally:
         p.close()
+
+
+V8_BREAKS = [
+    ("writer side", '''<datawriter_qos topic_filter="Alert">
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+      </datawriter_qos>''', "would stop sending 'Alert'"),
+    ("reader side", '''<datareader_qos topic_filter="_sys/DemoControl">
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+      </datareader_qos>''', "would stop receiving '_sys/DemoControl'"),
+]
+
+
+@pytest.mark.parametrize("label,qos,expected", V8_BREAKS, ids=[b[0] for b in V8_BREAKS])
+def test_variant_that_stops_data_flowing_is_an_error(real, label, qos, expected):
+    """node_agent V8: a switch changes one app; its peers stay on the default profile."""
+    real.edit("qos/variants.xml", "</qos_library>", f'''  <qos_profile name="Variant.Test.Breaks" base_name="protorig::Topics">
+      {qos}
+    </qos_profile>
+  </qos_library>''')
+    assert any(f"Variant.Test.Breaks: an app switched to it {expected}" in e for e in real.errors()), real.errors()

@@ -303,14 +303,18 @@ def test_set_param_rejects_non_finite(bus, start_app, probe_dir):
 
 
 def test_incompatible_qos_is_reported(bus, start_app, probe_dir):
-    """Beat B of the variant discussion: a best-effort Alert writer vs the default
-    reliable readers. DDS refuses to match, and the app says why."""
+    """A reader asking more than the app's writer offers (here a 1 s deadline on
+    Alert, which the default writer doesn't promise): DDS refuses to match, and
+    the app says why. (No shipped variant does this: node_agent V8 forbids it.)"""
+    import rti.connextdds as dds
     from fw.testing import wait_for
-    out = bus.listen("Alert")                         # default profile: RELIABLE reader
-    app = _start(start_app, probe_dir, "--qos-variant", "Variant.Alert.BestEffort")
+    qos = bus.provider.get_topic_datareader_qos("Alert")
+    qos.deadline.period = dds.Duration(1)
+    out = bus.listen("Alert", qos=qos)
+    app = _start(start_app, probe_dir)
     wait_for(lambda: "incompatible QoS on 'Alert' (writer side)" in app.output, 5, "the incompatible-QoS warning")
     line = next(l for l in app.output.splitlines() if "incompatible QoS on 'Alert'" in l)
-    assert line.rstrip().lower().endswith(("reliability", "durability")), line
+    assert line.rstrip().lower().endswith("deadline"), line
     assert out.count() == 0
 
 

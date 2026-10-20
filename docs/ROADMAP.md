@@ -19,9 +19,8 @@ Status: 20 Oct 2026.
 
 ## 1. Next, in build order
 
-| # | Item | What it gives | State | Detail |
-|---|---|---|---|---|
-| 4 | `check` rules (step 5) | Catches variants that would cut off default peers (V8), `node_agent` in `run:`, an app twice on a node, app names over 26 characters. Makes `Variant.Alert.BestEffort` reader-only | Ready | node_agent.md N2, N13 V8 |
+Empty: the framework steps 1-5 are all built (20 Oct 2026). Next is the first
+demo: write the requirements for row 5 (`result_gui`), then build it.
 
 
 ## 2. The first demo (temperature-skeleton)
@@ -76,6 +75,7 @@ Status: 20 Oct 2026.
 
 ## Done
 
+- 20 Oct 2026: `check` rules (step 5, row 4): `node_agent` in `run:`, an app twice on a node, app names over 26 characters, variants that would stop data flowing (V8; `Variant.Alert.BestEffort` now reader-only); undefined names in Python.
 - 20 Oct 2026: robustness review of `--sim` (B11 widened, B13 approved), a simplify pass, reporting and "simple to use" rules in CLAUDE.md; `run <scenario> --app X` replaces `run --scenario <scenario> --app X`.
 - 16 Oct 2026: `run --sim` through agents (step 4b, row 3): one agent per node on this PC, the same start/watch/stop as `--live`.
 - 8 Oct 2026: `run <scenario> --live` (step 4a): the whole rig up through its agents with one command (U11, U12); agents skip `node_agent` in `run:` (B31), removed from temperature-skeleton.

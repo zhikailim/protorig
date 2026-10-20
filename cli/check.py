@@ -11,10 +11,13 @@ Severity:
 """
 from __future__ import annotations
 
+import ast
 import ipaddress
+import os
 import shlex
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Iterator
 
 import repo
@@ -25,6 +28,8 @@ NODE_KEYS = {"ip", "os", "arch", "run", "external", "sim"}
 SCENARIO_KEYS = {"description", "domain", "nodes"}     # the folder name is the scenario's name
 KNOWN_OS = {"linux", "windows", "qnx", "android", "none"}
 KNOWN_ARCH = {"x86_64", "aarch64", "armv7", "tricore"}
+AGENT = "node_agent"
+MAX_APP_NAME = 26        # alert ids are "crash:"/"hang:"/"var:"/"start:" + app name, at most 32 bytes (N7)
 
 
 @dataclass
@@ -139,7 +144,7 @@ def _check_nodes(s: repo.Scenario, nodes: dict) -> Iterator[Finding]:
         if not run:          # N2: allowed; the machine still runs its node agent and shows on the node board
             yield Finding(WARN, where, "no demo apps in run: yet (its node agent still runs here)")
             continue
-        seen_entries = set()
+        seen_apps = set()
         for entry in run:
             try:
                 parts = shlex.split(str(entry))
@@ -149,9 +154,13 @@ def _check_nodes(s: repo.Scenario, nodes: dict) -> Iterator[Finding]:
             if not parts:
                 yield Finding(ERROR, where, "empty run entry")
                 continue
-            if str(entry) in seen_entries:
-                yield Finding(WARN, where, f"'{entry}' is listed twice")
-            seen_entries.add(str(entry))
+            if parts[0] == AGENT:     # N2
+                yield Finding(ERROR, where, f"remove {AGENT} from run:: every managed machine starts its agent by itself")
+                continue
+            if parts[0] in seen_apps:
+                # The agent keeps one row, one process and one set of alerts per app name.
+                yield Finding(ERROR, where, f"'{parts[0]}' is listed twice: each app runs once per node")
+            seen_apps.add(parts[0])
             yield from _resolve(apps, parts[0], where, not_kind="sim")
 
     if len(subnets) > 1:
@@ -195,6 +204,8 @@ def check_apps() -> Iterator[Finding]:
         where = str(app.path.relative_to(repo.ROOT))
         if not repo.APP_NAME.match(app.name):
             yield Finding(ERROR, where, "app folder names must be lowercase letters, digits and '_' (e.g. hpc_monitor)")
+        if len(app.name) > MAX_APP_NAME:
+            yield Finding(ERROR, where, f"app names are at most {MAX_APP_NAME} characters, so its alert ids fit")
         py_files = [p for p in app.path.rglob("*.py") if not p.name.startswith("test_") and p.name != "conftest.py"]
         if app.kind == "vehicle":
             # Vehicle code: C or C++ only. Tests next to the app may be Python (they are tooling).
@@ -217,6 +228,45 @@ def check_apps() -> Iterator[Finding]:
 # ---------------------------------------------------------------------------
 
 import check_contract  # noqa: E402,F401  (import registers its checks)
+
+
+# ---------------------------------------------------------------------------
+# Python names
+# ---------------------------------------------------------------------------
+
+SKIP_DIRS = {".git", "build", ".venv", "__pycache__", ".local"}   # generated, machine-specific or not ours
+
+
+def python_files() -> list:
+    """Every .py file in the repo, committed or not (a new app counts at once)."""
+    out = []
+    for d, dirs, files in os.walk(repo.ROOT):
+        dirs[:] = sorted(x for x in dirs if x not in SKIP_DIRS)
+        out += [Path(d) / f for f in sorted(files) if f.endswith(".py")]
+    return out
+
+
+@check("Python names")
+def check_python_names() -> Iterator[Finding]:
+    # A name that doesn't exist fails only when its line runs. Error handlers run
+    # rarely, so such a bug crashes an app exactly when something already went wrong.
+    try:
+        from pyflakes import checker, messages
+    except ImportError:
+        yield Finding(ERROR, "protorig", "pyflakes isn't installed, so undefined names can't be checked. "
+                      "Install the tooling packages: python -m pip install -r bootstrap/requirements.txt")
+        return
+    undefined = (messages.UndefinedName, messages.UndefinedLocal, messages.UndefinedExport)
+    for path in python_files():
+        where = path.relative_to(repo.ROOT).as_posix()
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=where)
+        except (SyntaxError, ValueError, UnicodeDecodeError) as e:
+            yield Finding(ERROR, where, f"isn't valid Python: {e}")
+            continue
+        for m in checker.Checker(tree, filename=where).messages:
+            if isinstance(m, undefined):
+                yield Finding(ERROR, f"{where}:{m.lineno}", f"undefined name {m.message_args[0]!r}")
 
 
 # ---------------------------------------------------------------------------

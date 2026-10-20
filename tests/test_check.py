@@ -143,6 +143,8 @@ SCENARIO_BREAKS = [
                                                                                "node names must be"),
     ("bad app name in run",    _mutated(nodes__hpc__run=["Agent"]),            "not a valid app name"),
     ("unbalanced quote",       _mutated(nodes__hpc__run=['monitor --label "x']), "can't be parsed"),
+    ("node_agent in run:",     _mutated(nodes__hpc__run=["node_agent", "agent"]), "remove node_agent from run:"),
+    ("app twice on a node",    _mutated(nodes__hpc__run=["agent", "agent --x 1"]), "'agent' is listed twice"),
 ]
 
 
@@ -195,7 +197,6 @@ WARNING_CASES = [
     ("mixed subnets",    _mutated(nodes__hpc__ip="10.0.9.3"),        "different /24 subnets"),
     ("unknown arch",     _mutated(nodes__hpc__arch="riscv"),         "arch: 'riscv'"),
     ("no sim twin",      _mutated(nodes__ecu__sim=DELETE),           "no sim: twin"),
-    ("duplicate run",    _mutated(nodes__hpc__run=["agent", "agent"]), "listed twice"),
     ("leftover name:",   _mutated(name="other"),                     "the folder name is the scenario's name"),
 ]
 
@@ -371,3 +372,40 @@ def test_test_command_explains_missing_packages(monkeypatch, capsys):
     assert test_cmd.main(types.SimpleNamespace(apps=[], k=None)) == 2
     out = capsys.readouterr().out
     assert "lacks: pytest" in out and "-m venv .venv" in out
+
+
+# --- Python names: an undefined name only fails when its line runs ----------------
+
+def test_undefined_name_in_an_error_handler_is_an_error(fake):
+    """The real case (20 Oct 2026): a handler naming an exception tuple never imported."""
+    (fake.root / "apps" / "tooling" / "gui" / "main.py").write_text(
+        "def read():\n    try:\n        return 1\n    except DDS_ERRORS:\n        return None\n", encoding="utf-8")
+    errs = [f for f in fake.findings() if f.severity == check.ERROR]
+    assert any(f.where == "apps/tooling/gui/main.py:4" and "undefined name 'DDS_ERRORS'" in f.message
+               for f in errs), errs
+
+
+def test_python_that_doesnt_parse_is_an_error(fake):
+    (fake.root / "apps" / "tooling" / "gui" / "main.py").write_text("def broken(:\n", encoding="utf-8")
+    assert any("isn't valid Python" in m for m in fake.errors())
+
+
+def test_names_in_build_and_venv_are_ignored(fake):
+    for d in ("build", ".venv"):
+        (fake.root / d).mkdir()
+        (fake.root / d / "gen.py").write_text("print(undefined_thing)\n", encoding="utf-8")
+    assert not [m for m in fake.errors() if "undefined name" in m]
+
+
+def test_missing_pyflakes_is_an_error_with_the_way_to_install(fake, monkeypatch):
+    """A skip is not a pass: without pyflakes, check says so and how to fix it."""
+    monkeypatch.setitem(sys.modules, "pyflakes", None)
+    assert any("pip install -r bootstrap/requirements.txt" in m for m in fake.errors())
+
+
+def test_app_name_over_26_characters_is_an_error(fake):
+    """N7: alert ids are e.g. "start:" + the app name, at most 32 bytes."""
+    _app(fake.root, "tooling", "a" * 27, "py")
+    _app(fake.root, "tooling", "b" * 26, "py")
+    errs = [f for f in fake.findings() if f.severity == check.ERROR]
+    assert [f.where for f in errs if "at most 26 characters" in f.message] == ["apps/tooling/" + "a" * 27], errs

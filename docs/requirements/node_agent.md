@@ -7,7 +7,10 @@ is removed. Step 3a (5 Oct 2026): the agent itself, N3-N8 and N11-N13, as
 behaviour rows B1-B27 in apps/tooling/node_agent/README.md. Step 3b (8 Oct
 2026): the `protorig agent start|stop|status` command (N1, N1a; agent rows
 B28-B30; tests/test_agent_cli.py). Step 4 (8-16 Oct 2026): `run --live`
-(run.md U11, U12) and `run --sim` through agents (N2; cli/sim.py).
+(run.md U11, U12) and `run --sim` through agents (N2; cli/sim.py). Step 5
+(20 Oct 2026): the `check` rules (N2 node_agent in run:, an app twice on a
+node, app names over 26 characters, N13 V8; `Variant.Alert.BestEffort` made
+reader-only). All five steps built.
 - N1-N3, N5-N8: approved in detail.
 - N4: REVISED and approved 30 Sep 2026 (the agent owns the process, the app
   owns its behaviour).

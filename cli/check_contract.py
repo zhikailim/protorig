@@ -482,8 +482,8 @@ def check_qos() -> Iterator[Finding]:
                               f"(so the sim twin behaves like the real node); differs in: {', '.join(diffs)}")
 
     # (b) within each profile, our own writers and readers must match each other;
-    #     across the default and a variant they should too, or the variant only
-    #     works when applied to every node at once.
+    #     and V8: a switch changes one app only, so a variant's side must match
+    #     the default peers, or switching it stops data flowing.
     external_topics = {t for s in external_specs().values() if isinstance(s, dict) for t in (s.get("topics") or {})}
     for topic in topics:
         if topic in external_topics:
@@ -500,11 +500,10 @@ def check_qos() -> Iterator[Finding]:
             pub_side = incompatibilities(w, base_r)      # this variant's writer vs default readers
             sub_side = incompatibilities(base_w, r)      # default writers vs this variant's reader
             if pub_side:
-                yield Finding(WARN, "qos/variants.xml",
-                              f"{name}: switch '{topic}' publishers together with their subscribers, or subscribers "
-                              f"on the default profile stop receiving ({'; '.join(pub_side)}). "
-                              "Switching only a publisher is the deliberate mismatch demo.")
+                yield Finding(ERROR, "qos/variants.xml",
+                              f"{name}: an app switched to it would stop sending '{topic}' to apps on the default "
+                              f"profile ({'; '.join(pub_side)}). A variant must never stop data flowing.")
             if sub_side:
-                yield Finding(WARN, "qos/variants.xml",
-                              f"{name}: switch '{topic}' subscribers together with their publishers, or they stop "
-                              f"receiving ({'; '.join(sub_side)}).")
+                yield Finding(ERROR, "qos/variants.xml",
+                              f"{name}: an app switched to it would stop receiving '{topic}' from apps on the "
+                              f"default profile ({'; '.join(sub_side)}). A variant must never stop data flowing.")

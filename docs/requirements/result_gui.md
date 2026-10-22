@@ -1,7 +1,7 @@
 # result_gui: requirements (base phase)
 
-Status: FOR REVIEW (22 Oct 2026). Replaces the first draft of 20 Oct (a node
-board, never approved). Agreed on 22 Oct: a physical view of the rig as the
+Status: R1-R7 APPROVED 22 Oct 2026, with D1 and D2 as recommended. Replaces
+the first draft of 20 Oct (a node board, never approved). Agreed on 22 Oct: a physical view of the rig as the
 base; the rest added one increment at a time, after trying the real screen.
 Approved rows become the behaviour table in `apps/tooling/result_gui/README.md`.
 
@@ -11,10 +11,16 @@ only listens. The story screen is `ivi_standin`; the presenter's tool is
 `control_panel`. Mockups: [running, with an alert](result_gui/base_1_running.png),
 [a machine lost](result_gui/base_2_lost.png).
 
-## R1. What is on screen  [for review]
+## R1. What is on screen  [approved]
 
-- The machines from `scenario.yaml`, laid out around the switch, with the
-  demo's apps inside each. The presenter tools (`node_agent`, `result_gui`,
+- The machines from `scenario.yaml`, with the demo's apps inside each, in
+  three layers: **cloud** on top, **compute** in the middle (HPCs, the
+  Windows PC), **edge** at the bottom (ECUs), the switch between compute and
+  edge. Each layer is a faint band labelled at the left; a dashed line
+  marked "WAN" separates the cloud. The layer comes from an optional
+  `layer:` key per node (`cloud`, `compute` or `edge`); without it, a
+  managed machine is `compute` and an `external: true` device is `edge`.
+  Only cloud nodes need the key. `check` rejects an unknown layer. The presenter tools (`node_agent`, `result_gui`,
   `control_panel`) are never drawn.
 - A machine shows **up**, **lost** or "not seen yet"; an external device
   (e.g. tc397) shows **data arriving** or **no data**.
@@ -24,7 +30,7 @@ only listens. The story screen is `ivi_standin`; the presenter's tool is
   by a word as well as a colour. F11 full screen.
 - No configuration: in a `run:` list, `result_gui` needs no arguments.
 
-## R2. Links  [for review]
+## R2. Links  [approved]
 
 - One link per writer and reader that would match: same topic and
   compatible QoS, worked out from Connext's discovery data with the rules
@@ -37,7 +43,7 @@ only listens. The story screen is `ivi_standin`; the presenter's tool is
 - Apps are named by their participant name (`node/app`). A device whose
   name we don't control (the real TC397) is placed by its IP address.
 
-## R3. Failures and captions  [for review]
+## R3. Failures and captions  [approved]
 
 - Lost comes from heartbeats (3 s) and, for external devices, data silence
   (`--silence`, default 2 s), never from discovery, which takes 10 s or more.
@@ -48,13 +54,13 @@ only listens. The story screen is `ivi_standin`; the presenter's tool is
   with the state word; caption "hpc_monitor on hpc-pi crashed".
 - Captions fade after 5 s; the newest replaces the previous one.
 
-## R4. Alert banner  [for review]
+## R4. Alert banner  [approved]
 
 - Active alerts across the top, most severe first: "CRITICAL  Temperature
   high: 14.7 °C (hpc-vm, hpc-pi)". At most 3, then "+N more". Gone when
   cleared. An alert whose source vanished stays, greyed, "source lost".
 
-## R5. Data rates, for "lit"  [for review]
+## R5. Data rates, for "lit"  [approved]
 
 - Every app's heartbeat (`_sys/NodeStatus`) gains the sample rate of each of
   its writers, read once a second from Connext's own counters: no counting
@@ -64,7 +70,7 @@ only listens. The story screen is `ivi_standin`; the presenter's tool is
   arriving. It subscribes to nothing else, so it never pulls large data
   (an OTA transfer, say) onto the network a second time.
 
-## R6. Never disturbs the demo  [for review]
+## R6. Never disturbs the demo  [approved]
 
 1. Nothing in the data path: reporting reads counters once a second.
 2. The screen can never slow an app: nothing it reads makes a writer wait.
@@ -74,7 +80,7 @@ only listens. The story screen is `ivi_standin`; the presenter's tool is
    reporting on and off (target: under 1 % CPU, no measurable latency);
    `result_gui`'s own CPU is measured too.
 
-## R7. How it's built  [for review]
+## R7. How it's built  [approved]
 
 - Python, PySide6 6.8.3 and pyqtgraph 0.14, pinned (the newest PySide6
   crashes with pyqtgraph; checked 20 Oct).
@@ -86,12 +92,18 @@ only listens. The story screen is `ivi_standin`; the presenter's tool is
   line per visible change ("machine hpc-pi: lost"); a screenshot per test
   for review; fuzzed (bursts, silence, kills, late join); plus R6's test.
 
-## Decisions for you
+## Decisions (22 Oct 2026)
 
-| # | Question | Recommended | Alternative |
-|---|---|---|---|
-| D1 | GUI toolkit | PySide6 + pyqtgraph: modern look, smooth, testable headless | Tkinter: nothing to install, dated look |
-| D2 | Where the GUI packages go | Every machine, one `requirements.txt` | Windows only: smaller Pi, two package lists |
+- D1: PySide6 (pyqtgraph only when the live-plot increment needs it).
+- D2: GUI packages on every machine, one `requirements.txt`. If PySide6
+  doesn't install on the Pi, fall back to Windows only.
+
+## Build order (risk first, one merge each, checked on Windows)
+
+1. `fw/gui.py` and an empty window that starts and stops cleanly (R7).
+2. Machines, layers and states (R1, R3).
+3. Links, with a test that they agree with what Connext matches (R2).
+4. Heartbeat rates and lit/dim, alert banner, overhead test (R4, R5, R6).
 
 ## Later, one at a time, by value
 

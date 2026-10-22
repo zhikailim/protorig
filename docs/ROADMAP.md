@@ -27,7 +27,7 @@ demo: write the requirements for row 5 (`result_gui`), then build it.
 
 | # | Item | What it gives | State | Detail |
 |---|---|---|---|---|
-| 5 | `result_gui` (base phase) | The rig as it really is: machines, data links, failures, alerts | Requirements for review | docs/requirements/result_gui.md |
+| 5 | `result_gui` (base phase) | The rig as it really is: machines, data links, failures, alerts | Ready (approved 22 Oct) | docs/requirements/result_gui.md |
 | 6 | `control_panel` | Start, stop, kill, variant and parameter buttons | Planned | node_agent.md N4, N13, N14 |
 | 7 | `ivi_standin` | The IVI side of the story | Planned | scenario README |
 | 8 | C++ layer: `fw::App`, `fw.cmake`, C++ app template, `new app --kind vehicle` | Vehicle apps in C++17 | Planned | WORKFLOW `libs/`, `templates/` |

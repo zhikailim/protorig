@@ -27,7 +27,8 @@ only listens. The story screen is `ivi_standin`; the presenter's tool is
 - Nothing else by default: no side panes, no QoS text, no event log. One
   alert banner while an alert is active; one short caption when something
   happens. Readable at 5 m: dark background, large type, every state shown
-  by a word as well as a colour. F11 full screen.
+  by a word as well as a colour. Full screen: double-click, or F11 (many
+  laptops reserve F11 for the hardware unless Fn is held); Esc leaves.
 - No configuration: in a `run:` list, `result_gui` needs no arguments.
 
 ## R2. Links  [approved]

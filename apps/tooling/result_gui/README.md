@@ -21,6 +21,6 @@ Needs PySide6 (`bootstrap/requirements.txt`).
 | G3 | it runs under a launcher (the agent, `run`) | the launcher dies | stops by itself, as G2 (N6) |
 | G4 | it runs | the window is closed | stops, as G2 (the agent then shows STOPPED) |
 | G5 | it runs | the window freezes for 3 s or more | its heartbeat pauses, so the agent reports "not responding"; it resumes when the window does |
-| G6 | it runs | F11, whichever part of the window has focus | full screen on and off; the window makes itself active when it opens (checked by hand on Windows) |
+| G6 | it runs | F11, whichever part of the window has focus (Fn+F11 on laptops that reserve F11) | full screen on and off; the window makes itself active when it opens (checked by hand on Windows, 22 Oct 2026) |
 | G7 | an unknown argument | | exit 2 with a clear message, as every app |
 | G8 | PySide6 isn't installed | | exit 2: "needs PySide6 ... pip install -r bootstrap/requirements.txt" |

@@ -128,13 +128,23 @@ def plan_node(scenario: str, data: dict, node: str) -> list[Launch]:
 BANNER = ("[RTI LICENSE]", "Expires on", "Please contact support@rti.com")
 
 
+# One lock for everything this process prints: app lines arrive on reader
+# threads while run itself reports, and print() writes text and newline
+# separately, so without it two lines can be glued together mid-line.
+OUT_LOCK = threading.Lock()
+
+
+def out(text: str) -> None:
+    with OUT_LOCK:
+        print(text, flush=True)
+
+
 class Console:
-    """One console for every app's output, each line prefixed with node/app (U8).
-    A lock keeps lines from different apps from interleaving mid-line."""
+    """One console for every app's output, each line prefixed with node/app (U8)."""
 
     def __init__(self, width: int):
         self.width = width
-        self._lock = threading.Lock()
+        self._lock = OUT_LOCK
         self._banner_seen: set[str] = set()
 
     def line(self, who: str, text: str):

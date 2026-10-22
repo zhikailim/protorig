@@ -33,7 +33,7 @@ import yaml
 
 import agent as agentcmd
 import repo
-from run import RunError, this_node
+from run import RunError, out, this_node
 
 sys.path.insert(0, str(repo.ROOT / "libs" / "py"))
 from fw.agentfiles import AgentFiles          # noqa: E402
@@ -54,7 +54,7 @@ ENDED = {"NOT_RUNNING", "STOPPED", "KILLED", "CRASHED", "UNAVAILABLE"}  # no pro
 
 def say(text: str) -> None:
     t = time.time()
-    print(time.strftime("%H:%M:%S", time.localtime(t)) + f" {text}", flush=True)
+    out(time.strftime("%H:%M:%S", time.localtime(t)) + f" {text}")
 
 
 def short(state) -> str:
@@ -331,7 +331,7 @@ class Live:
         say(f"{node}: agent ready" + ("" if rows else "; no apps"))
         width = max((len(r.app) for r in rows), default=0)
         for r in rows:
-            print(f"    {r.app:<{width}}  {short(r.state):<11}  {r.detail}".rstrip(), flush=True)
+            out(f"    {r.app:<{width}}  {short(r.state):<11}  {r.detail}".rstrip())
 
     def print_row(self, r) -> None:
         state = short(r.state)
@@ -388,5 +388,5 @@ def main(args, data: dict) -> int:
     try:
         return Live(args, data).run()
     except RunError as e:
-        print(f"protorig run: {e}", flush=True)
+        out(f"protorig run: {e}")
         return 2

@@ -400,7 +400,9 @@ def test_sim_live(rig, bus):
         assert any(l.startswith("desk/probe | ") and "LABEL=two words" in l for l in run.lines), run.output
         assert not any(l.count(" | ") > 1 and "/node_agent" in l.split(" | ")[0] for l in run.lines)
         assert run.output.count("[RTI LICENSE]") <= 1                                   # banner once
-        assert not [l for l in run.lines if not l.strip() or l.rstrip().endswith(" |")]   # no blank lines
+        blank = [i for i, l in enumerate(run.lines) if not l.strip() or l.rstrip().endswith(" |")]
+        assert not blank, "blank lines at " + str(blank) + ":\n" + "\n".join(            # no blank lines
+            f"{i}: {l!r}" for i, l in enumerate(run.lines) if any(abs(i - b) <= 3 for b in blank))
 
         code = run.ctrl_c()                                                              # U9
         assert "stopping every app" in run.output
@@ -513,3 +515,33 @@ def test_stop_while_starting_is_not_a_crash(since_start, report, failed):
         assert runmod.stop_result(s, s.started + since_start) == (report, failed)
     finally:
         s.terminate(grace=0.1)
+
+
+def test_concurrent_output_never_glues_lines(capsys):
+    """run's own messages and app lines arrive on different threads (--sim, --live):
+    each printed line must stay whole (found 22 Oct 2026: a glued line + a blank one)."""
+    import run as runmod
+    console = runmod.Console(12)
+
+    def apps(n):
+        for i in range(400):
+            console.line(f"node/app{n}", f"line {i} from app {n}")
+
+    def own():
+        for i in range(400):
+            runmod.out(f"12:00:00 run message {i}")
+    threads = [threading.Thread(target=apps, args=(n,)) for n in range(4)] + [threading.Thread(target=own) for _ in range(2)]
+    old = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)        # switch threads constantly, so a gap between writes is hit
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    finally:
+        sys.setswitchinterval(old)
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 4 * 400 + 2 * 400
+    bad = [l for l in lines if not (l.startswith("node/app") and l.count(" | ") == 1 and l.count("from app") == 1)
+           and not (l.startswith("12:00:00 run message") and l.count("run message") == 1)]
+    assert not bad, bad[:5]

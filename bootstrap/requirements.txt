@@ -7,3 +7,4 @@ rti.connext~=7.7.0
 pyyaml>=6
 pytest>=8
 pyflakes>=3           # `protorig check`: undefined names in Python code
+PySide6-Essentials==6.8.3   # result_gui, control_panel windows. Pinned: 6.12 crashed with pyqtgraph (20 Oct 2026)

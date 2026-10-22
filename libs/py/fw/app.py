@@ -176,6 +176,7 @@ class App:
         self._seen_cmds: set[int] = set()
         self._seq = 0
         self._cpu_last = (time.monotonic(), time.process_time())
+        self._alive_check: Callable[[], bool] | None = None
         if self._help_requested:
             return                                 # --help: no DDS, run() prints help
 
@@ -327,7 +328,23 @@ class App:
 
     # ------------------------------------------------------------------ plumbing
 
+    @property
+    def help_requested(self) -> bool:
+        """--help was given: run() prints the help and returns; there is no DDS."""
+        return self._help_requested
+
+    def alive_if(self, check: Callable[[], bool]) -> None:
+        """Send the heartbeat only while check() is true. A GUI uses it so a frozen
+        window looks "not responding" (N7), not healthy because its DDS thread runs."""
+        self._alive_check = check
+
     def _heartbeat(self) -> None:
+        if self._alive_check is not None:
+            try:
+                if not self._alive_check():
+                    return
+            except Exception:
+                log(self.who, "ERROR", f"in alive_if() check (heartbeat sent anyway):\n{traceback.format_exc()}")
         now, cpu = time.monotonic(), time.process_time()
         wall = now - self._cpu_last[0]
         load = (cpu - self._cpu_last[1]) / wall if wall > 0 else 0.0

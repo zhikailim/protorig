@@ -269,7 +269,7 @@ All generated output: rtiddsgen code, per-node QoS, binaries. Git-ignored. Safe 
 
 ```
 libs/cpp/fw/   # C++17, POSIX only: app.hpp (startup, participant, shutdown), heartbeat, log, fw.cmake
-libs/py/fw/    # Python: types.py (IDL mirrors), app.py, widgets/ (live plot, alert banner, node board)
+libs/py/fw/    # Python: types.py (IDL mirrors), app.py, gui.py (a Qt window for an fw.App: result_gui, control_panel)
 ```
 - Goes here only when two or more apps need it. Used in place by apps, never copied, no version numbers.
 - `fw::App` handles standard args (`--node --scenario --verbose`), loads only the generated `node_qos.xml`, names the participant `<node>/<app>`, starts the heartbeat, and shuts down cleanly on Ctrl-C or a kill command.

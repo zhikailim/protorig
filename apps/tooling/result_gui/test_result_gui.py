@@ -215,9 +215,4 @@ def test_G6_f11_toggles_full_screen(monkeypatch):
     assert w.isFullScreen()
     QTest.keyClick(w.windowHandle(), QtCore.Qt.Key.Key_F11)
     assert not w.isFullScreen()
-    # F11 is a hardware key on many laptops, so double-click toggles too, and Esc leaves.
-    QTest.mouseDClick(w.windowHandle(), QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(200, 200))
-    assert w.isFullScreen()
-    QTest.keyClick(w.windowHandle(), QtCore.Qt.Key.Key_Escape)
-    assert not w.isFullScreen()
     w.close()

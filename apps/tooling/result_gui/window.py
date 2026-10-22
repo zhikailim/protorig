@@ -21,18 +21,11 @@ class Window(QtWidgets.QWidget):
             w.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             box.addWidget(w)
         box.addStretch()
-        # R1: full screen. Double-click works everywhere; F11 is a hardware key
-        # on many laptops (Windows opens Settings unless Fn is held), so it's a
-        # convenience only. Esc leaves. Window-wide shortcuts, not a key handler:
+        # R1: F11 toggles full screen. A window-wide shortcut, not a key handler:
         # keys go to whichever widget has focus, and this window's labels take none.
-        for key, slot in ((QtCore.Qt.Key.Key_F11, self.toggle_full_screen),
-                          (QtCore.Qt.Key.Key_Escape, self.showNormal)):
-            sc = QtGui.QShortcut(QtGui.QKeySequence(key), self)
-            sc.setContext(QtCore.Qt.ShortcutContext.WindowShortcut)
-            sc.activated.connect(slot)
-
-    def mouseDoubleClickEvent(self, event):
-        self.toggle_full_screen()
+        full = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_F11), self)
+        full.setContext(QtCore.Qt.ShortcutContext.WindowShortcut)
+        full.activated.connect(self.toggle_full_screen)
 
     def toggle_full_screen(self):
         self.showNormal() if self.isFullScreen() else self.showFullScreen()

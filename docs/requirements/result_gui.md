@@ -1,107 +1,116 @@
-# result_gui: requirements
+# result_gui: requirements (base phase)
 
-Status: FOR REVIEW (20 Oct 2026). Sources: `scenarios/temperature-skeleton/README.md`
-(beats 1-5), node_agent N7 and N12, WORKFLOW `apps/`. Approved rows become the
-behaviour table in `apps/tooling/result_gui/README.md`.
+Status: FOR REVIEW (22 Oct 2026). Replaces the first draft of 20 Oct (a node
+board, never approved). Agreed on 22 Oct: a physical view of the rig as the
+base; the rest added one increment at a time, after trying the real screen.
+Approved rows become the behaviour table in `apps/tooling/result_gui/README.md`.
 
-Purpose: the audience's main screen. It shows, from the back of a room, that
-every machine is up, what the data is doing, and when something goes wrong.
-It only listens: it publishes nothing but its own heartbeat.
+Purpose: the "under the hood" screen. It shows the audience the rig as it
+really is, where the data goes, and what happens when something fails. It
+only listens. The story screen is `ivi_standin`; the presenter's tool is
+`control_panel`. Mockups: [running, with an alert](result_gui/base_1_running.png),
+[a machine lost](result_gui/base_2_lost.png).
 
-## G1. One window, three areas  [for review]
+## R1. What is on screen  [for review]
 
-- **Alert banner** across the top, **live plots** in the middle, **node board**
-  down the left side.
-- Readable at 5 m: dark background, large type, and every state shown by a
-  word as well as a colour (never colour alone).
-- F11 toggles full screen. Closing the window stops the app cleanly (exit 0,
-  the agent shows STOPPED).
+- The machines from `scenario.yaml`, laid out around the switch, with the
+  demo's apps inside each. The presenter tools (`node_agent`, `result_gui`,
+  `control_panel`) are never drawn.
+- A machine shows **up**, **lost** or "not seen yet"; an external device
+  (e.g. tc397) shows **data arriving** or **no data**.
+- Nothing else by default: no side panes, no QoS text, no event log. One
+  alert banner while an alert is active; one short caption when something
+  happens. Readable at 5 m: dark background, large type, every state shown
+  by a word as well as a colour. F11 full screen.
+- No configuration: in a `run:` list, `result_gui` needs no arguments.
 
-## G2. Node board  [for review]
+## R2. Links  [for review]
 
-- One card per node in `scenario.yaml`, in file order, shown from the start
-  as grey "not seen yet", so a missing machine is visible, not absent.
-- Managed machine, from its agent's heartbeat: **up** (green), **lost** (red,
-  heartbeat lost for 3 s: cable out, machine off, agent crashed), or
-  **stopped** (grey, agent stopped cleanly).
-- Under it, one row per app from `_sys/AppState`: the state word and its
-  detail (e.g. "KILLED  killed by windows/control_panel"). RUNNING green;
-  STARTING, RESTARTING, STOPPING amber; CRASHED, KILLED red; the rest grey.
-  A lost agent's rows show "unknown: agent lost" (N12 rule 1).
-- An app running a QoS variant shows its name on its row (from its
-  heartbeat), so beat 5's switch is visible.
-- External node (e.g. tc397), from its data topics in `external.yaml`:
-  **data arriving** (green), **no data for N s** (red, after `--silence`
-  seconds, default 2), or "not seen yet". (Not by a QoS deadline: readers
-  of the ECU's topics must not request one, or they'd never match it.)
-- A heartbeat with no AppState row (an app started by hand): listed under
-  its node as "unmanaged" (N12).
-- A machine whose heartbeat send time is more than 1 s off its arrival
-  time: "clock off by N s" on its card (N12).
+- One link per writer and reader that would match: same topic and
+  compatible QoS, worked out from Connext's discovery data with the rules
+  `check` already uses.
+- Drawn along the physical path: out through the machine's cable, the
+  switch, into the other machine (UDP). Between two apps on the same
+  machine, a short link inside the box (shared memory).
+- Coloured by topic. **Lit** while data flows, **dim and dashed** when it
+  doesn't.
+- Apps are named by their participant name (`node/app`). A device whose
+  name we don't control (the real TC397) is placed by its IP address.
 
-## G3. Live plots  [for review]
+## R3. Failures and captions  [for review]
 
-- `--plot "<topic>.<field>"`, one per plot, e.g.
-  `result_gui --plot 'Example Temperature.temperature'`. The only
-  scenario-specific setting: nodes come from `scenario.yaml`, external
-  topics from `external.yaml`.
-- One line per instance (per key value, labelled); a rolling window of
-  `--window` seconds (default 30) by arrival time; the latest value shown
-  large.
-- Silent for `--silence` seconds: "no data for N s" over the plot.
-- An unknown topic or field: a clear message and exit 2 at start (the agent
-  shows it as CRASHED with that message), never a blank plot.
+- Lost comes from heartbeats (3 s) and, for external devices, data silence
+  (`--silence`, default 2 s), never from discovery, which takes 10 s or more.
+- A lost machine: red, its cable dashed, its links dim. Caption: "hpc-pi
+  lost after 3.0 s · everything else carries on". Back: "hpc-pi back after
+  7 s, no restarts".
+- An app that crashes or is killed (from `_sys/AppState`): its box turns red
+  with the state word; caption "hpc_monitor on hpc-pi crashed".
+- Captions fade after 5 s; the newest replaces the previous one.
 
-## G4. Alert banner  [for review]
+## R4. Alert banner  [for review]
 
-- Active alerts (alive `Alert` instances), most severe first, then newest:
-  "CRITICAL  hpc-pi/hpc_monitor: Temperature high (14.7)". CRITICAL red,
-  WARNING amber, INFO blue. At most 5 shown, then "+N more".
-- Cleared (disposed): removed. None active: "No active alerts".
-- An alert whose source vanished without clearing it: kept, greyed, "source
-  lost", so a dead app's alert never silently looks cleared.
+- Active alerts across the top, most severe first: "CRITICAL  Temperature
+  high: 14.7 °C (hpc-vm, hpc-pi)". At most 3, then "+N more". Gone when
+  cleared. An alert whose source vanished stays, greyed, "source lost".
 
-## G5. As an app  [for review]
+## R5. Data rates, for "lit"  [for review]
 
-- Starts in any order and late: rows and alerts are kept for late joiners,
-  so a restarted GUI shows the current state at once.
-- Bad or extreme data never crashes it or freezes the screen: non-finite
-  values skipped, long text trimmed, unknown enum values shown as numbers,
-  bursts drawn at most 20 times a second.
-- QoS from `qos/` like any app; `--qos-variant` works (e.g.
-  `Variant.Alert.BestEffort` switches its alert reader).
+- Every app's heartbeat (`_sys/NodeStatus`) gains the sample rate of each of
+  its writers, read once a second from Connext's own counters: no counting
+  per sample. A bounded list (16 writers), so it stays Micro-compatible.
+- External devices send no heartbeat: `result_gui` subscribes to their
+  topics from `external.yaml` (small, e.g. 10 Hz temperature) to see data
+  arriving. It subscribes to nothing else, so it never pulls large data
+  (an OTA transfer, say) onto the network a second time.
 
-## G6. How it's built  [for review]
+## R6. Never disturbs the demo  [for review]
 
-- Python, **PySide6 6.8.3 + pyqtgraph 0.14**, both pinned. Checked 20 Oct
-  2026: 20 frames a second headless, screenshots work. The newest PySide6
-  (6.12) crashes inside pyqtgraph, hence the pin.
-- A small shared helper, `libs/py/fw/gui.py` (control_panel needs the same):
-  fw.App's DDS loop on a background thread, Qt on the main thread, Ctrl-C
-  and the agent's stop still work.
-- Tests are black-box over DDS with the real window running headless: the
-  test bus publishes heartbeats, rows, alerts and data; result_gui logs one
-  line per visible change ("board hpc-pi: lost"), which the tests read. Each
-  test saves a screenshot to `build/test-shots/` for review. Fuzzed:
-  random contents, bursts, silence, publishers killed and restarted, late
-  join.
+1. Nothing in the data path: reporting reads counters once a second.
+2. The screen can never slow an app: nothing it reads makes a writer wait.
+   A frozen or crashed `result_gui` changes nothing for the demo.
+3. Reporting never crashes an app: failures are logged and skipped.
+4. Measured: a test compares an app's CPU and its data latency with
+   reporting on and off (target: under 1 % CPU, no measurable latency);
+   `result_gui`'s own CPU is measured too.
+
+## R7. How it's built  [for review]
+
+- Python, PySide6 6.8.3 and pyqtgraph 0.14, pinned (the newest PySide6
+  crashes with pyqtgraph; checked 20 Oct).
+- `libs/py/fw/gui.py`, shared with `control_panel`: Qt on the main thread,
+  fw.App's DDS loop in the background, Ctrl-C and the agent's stop still work.
+- One model, fed by DDS in one place; drawing pieces only read it, have no
+  DDS entities and no threads. Each later increment is one new piece.
+- Tests: black-box over DDS with the real window running headless; one log
+  line per visible change ("machine hpc-pi: lost"); a screenshot per test
+  for review; fuzzed (bursts, silence, kills, late join); plus R6's test.
 
 ## Decisions for you
 
 | # | Question | Recommended | Alternative |
 |---|---|---|---|
-| D1 | GUI toolkit | PySide6 + pyqtgraph: modern look, smooth plots, testable headless | Tkinter + matplotlib: no install, but dated look and slower plots |
-| D2 | Where the GUI packages are installed | Every machine, one `requirements.txt`: one install command everywhere (about 100 MB on the Pi) | Windows only: smaller Pi, but two package lists to keep |
+| D1 | GUI toolkit | PySide6 + pyqtgraph: modern look, smooth, testable headless | Tkinter: nothing to install, dated look |
+| D2 | Where the GUI packages go | Every machine, one `requirements.txt` | Windows only: smaller Pi, two package lists |
 
-## Open, not blocking
+## Later, one at a time, by value
 
-- Beat 5 as written ("toggle a QoS variant, behaviour changes on screen"):
-  `Variant.Alert.BestEffort` only loses alerts when packets are lost, so on a
-  clean switch nothing visibly changes. The board will show the variant;
-  whether the beat needs packet loss to make it visible is a question for
-  the Control Panel's requirements (roadmap row 6).
+1. Events: deadline missed, QoS mismatch, samples lost (apps report them on a
+   new `_sys/` topic; the link flashes, with a caption).
+2. Dots travelling at the real rate.
+3. QoS visible on a link (reliable solid, best effort dashed), and a caption
+   when a variant switch changes it.
+4. Ownership changed (opt-in: the one feature that checks every sample).
+5. A countdown ring as a machine's liveliness runs out.
+6. Network saturation (cables glow with load).
+7. Per-demo panels (e.g. OTA progress).
+8. Live plot of a field.
+9. A databus view, switched to when explaining decoupling.
 
-## Not included
+## Checked 22 Oct 2026
 
-Recording or history, acknowledging alerts (that would mean publishing),
-machine CPU and memory (roadmap row 30), more than one window, a web page.
+Connext's Python API gives every writer and reader with topic, type and full
+QoS, participant names, and each participant's UDP and shared-memory
+addresses (the UDP one carries its IP). A clean stop is seen in 0.25 s; a
+killed process only after the participant lease (10 s with our QoS), hence
+R3. The real TC397 is confirmed at bring-up.

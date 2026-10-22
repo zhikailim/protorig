@@ -199,16 +199,20 @@ def test_G5_a_frozen_window_pauses_the_heartbeat(bus, gui_app):
 
 
 def test_G6_f11_toggles_full_screen(monkeypatch):
+    """The key goes in through the window system, as a real keyboard's would.
+    Limit: headless Qt always gives the window focus, so the Windows failure of
+    22 Oct 2026 (F11 did nothing) can't be reproduced here; it's checked by hand
+    on Windows. This test catches a missing or broken shortcut."""
     for k, v in HEADLESS.items():
         monkeypatch.setenv(k, v)
-    from PySide6 import QtCore, QtGui, QtWidgets
+    from PySide6 import QtCore, QtWidgets
+    from PySide6.QtTest import QTest
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     w = window_module().Window("x")
     w.show()
-    press = lambda: w.keyPressEvent(QtGui.QKeyEvent(QtCore.QEvent.Type.KeyPress, QtCore.Qt.Key.Key_F11,  # noqa: E731
-                                                    QtCore.Qt.KeyboardModifier.NoModifier))
-    press()
+    assert QTest.qWaitForWindowActive(w, 3000), "the window should make itself active when shown"
+    QTest.keyClick(w.windowHandle(), QtCore.Qt.Key.Key_F11)
     assert w.isFullScreen()
-    press()
+    QTest.keyClick(w.windowHandle(), QtCore.Qt.Key.Key_F11)
     assert not w.isFullScreen()
     w.close()

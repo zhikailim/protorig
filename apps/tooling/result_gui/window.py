@@ -1,6 +1,6 @@
 """result_gui's window (Qt widgets, main thread only). Merge 1: a placeholder
 showing the scenario's name; the rig is drawn here from merge 2."""
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 BG, TEXT, DIM = "#0f1216", "#e8eaed", "#7d8590"
 
@@ -21,9 +21,18 @@ class Window(QtWidgets.QWidget):
             w.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             box.addWidget(w)
         box.addStretch()
+        # R1: F11 toggles full screen. A window-wide shortcut, not a key handler:
+        # keys go to whichever widget has focus, and this window's labels take none.
+        full = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_F11), self)
+        full.setContext(QtCore.Qt.ShortcutContext.WindowShortcut)
+        full.activated.connect(self.toggle_full_screen)
 
-    def keyPressEvent(self, event):                  # R1: F11 toggles full screen
-        if event.key() == QtCore.Qt.Key.Key_F11:
-            self.showNormal() if self.isFullScreen() else self.showFullScreen()
-        else:
-            super().keyPressEvent(event)
+    def toggle_full_screen(self):
+        self.showNormal() if self.isFullScreen() else self.showFullScreen()
+
+    def showEvent(self, event):
+        # Started from a terminal, Windows may open it without focus (F11 would go
+        # to the terminal): ask to be the active window.
+        super().showEvent(event)
+        self.raise_()
+        self.activateWindow()

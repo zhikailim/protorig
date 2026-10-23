@@ -29,7 +29,6 @@ import sys
 import threading
 import time
 
-import yaml
 
 import agent as agentcmd
 import repo
@@ -37,6 +36,7 @@ from run import RunError, out, this_node
 
 sys.path.insert(0, str(repo.ROOT / "libs" / "py"))
 from fw.agentfiles import AgentFiles          # noqa: E402
+from fw.scenario import external_topics       # noqa: E402
 from fw.app import DDS_ERRORS                 # noqa: E402
 
 POLL = 0.1
@@ -155,16 +155,6 @@ def new_cmd_id() -> int:
     return random.SystemRandom().getrandbits(63)
 
 
-def external_topics(node: str) -> list[str]:
-    f = repo.ROOT / "external" / node / "external.yaml"
-    try:
-        data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
-        topics = data.get("topics") or {}
-        return [str(t) for t in topics] if isinstance(topics, dict) else []
-    except (OSError, ValueError, yaml.YAMLError):
-        return []
-
-
 class Live:
     """sim=True: the same steps for `run --sim` (U2), whose agents and twins run
     here, started by sim.py: twins are announced instead of devices, agents that
@@ -213,7 +203,7 @@ class Live:
 
     # --- the steps
     def drive(self, rig: Rig, domain: int) -> int:
-        ext_topics = {n: external_topics(n) for n in self.external}
+        ext_topics = {n: external_topics(repo.ROOT, n) for n in self.external}
         for n, topics in ext_topics.items():
             for t in topics:
                 rig.watch_external(t)

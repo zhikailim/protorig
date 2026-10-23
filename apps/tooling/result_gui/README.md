@@ -5,12 +5,15 @@ what happens when something fails. Listens only. Requirements:
 [docs/requirements/result_gui.md](../../../docs/requirements/result_gui.md) (R1-R7,
 approved 22 Oct 2026). Built in four merges; this table grows with each.
 
-Run: `./protorig run <scenario> --app result_gui` (no arguments of its own).
-Needs PySide6 (`bootstrap/requirements.txt`).
+Run: `./protorig run <scenario> --app result_gui`. Needs PySide6 (`bootstrap/requirements.txt`).
+Optional: `--silence S` (default 2): seconds without data before an external device shows "no data".
 
 | Topics in | Topics out |
 |---|---|
-| (from merge 2) `_sys/NodeStatus`, `_sys/AppState`, `Alert`, discovery | its heartbeat only |
+| `_sys/NodeStatus`, `_sys/AppState`, each external device's topics (`external/<node>/external.yaml`); later `Alert`, discovery | its heartbeat only |
+
+Code: `main.py` reads DDS, `model.py` decides what to show (no DDS, no Qt),
+`layout.py` places it for the window size, `window.py` draws it.
 
 ## Behaviour (merge 1: the window, R7)
 
@@ -24,3 +27,22 @@ Needs PySide6 (`bootstrap/requirements.txt`).
 | G6 | it runs | F11, whichever part of the window has focus (Fn+F11 on laptops that reserve F11) | full screen on and off; the window makes itself active when it opens (checked by hand on Windows, 22 Oct 2026) |
 | G7 | an unknown argument | | exit 2 with a clear message, as every app |
 | G8 | PySide6 isn't installed | | exit 2: "needs PySide6 ... pip install -r bootstrap/requirements.txt" |
+
+## Behaviour (merge 2: machines, layers, states, R1 and R3)
+
+Every visible change is also one log line, e.g. `machine hpc-pi: lost`, `caption: ...`.
+
+| # | Given | When | Then |
+|---|---|---|---|
+| G9 | a scenario | result_gui starts | each node drawn as a machine in its layer: cloud on top (a dashed WAN line under it), compute, the switch, edge at the bottom; a cable from each machine to the switch (cloud: to the WAN line); inside each machine its apps from `run:` plus any it hears, never `node_agent`, `result_gui`, `control_panel` |
+| G10 | a machine | any of its heartbeats arrive | "up", green |
+| G11 | a machine | nothing heard from it yet | "not seen yet", grey |
+| G12 | a machine is up | all its heartbeats stop (killed, paused, cable pulled) | after about 3 s: "lost", red, cable dashed red, its apps greyed; caption "hpc-pi lost after 3.2 s · everything else carries on" (the second part only if another machine is up) |
+| G13 | a machine is lost | its heartbeats return | "up"; caption "hpc-pi back after 7 s, no restarts", or "apps restarted" if any heartbeat now comes from a new process |
+| G14 | the agent reports an app (`_sys/AppState`) | the state changes | the app shows the word (running, starting, crashed, killed, not responding...), coloured; crashed or killed adds the caption "hpc_monitor on hpc-pi crashed" / "was killed" (not for a state found at start-up) |
+| G15 | an external device (e.g. tc397) | its topics' data arrive / stop for `--silence` s | "data arriving" green / "no data" red with caption "tc397: no data for 2.1 s · everything else carries on"; on return "tc397: data back after 9 s" |
+| G16 | a machine | all its heartbeats are disposed (clean stop) | "stopped", grey, no caption |
+| G17 | a caption | 5 s pass, or a newer one comes | it fades out over its last second / is replaced |
+| G18 | any window size from 800x450 (the minimum) up | | nothing overlaps or leaves the window; long names shortened with "…" (the app's name before its state word); apps that don't fit end with "+N more" |
+| G19 | anything goes wrong while drawing | | logged once ("drawing failed"), the window stays up |
+| G20 | `--scenario` names no readable scenario | | exit 2 with the reason |

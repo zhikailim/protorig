@@ -145,7 +145,14 @@ SCENARIO_BREAKS = [
     ("unbalanced quote",       _mutated(nodes__hpc__run=['monitor --label "x']), "can't be parsed"),
     ("node_agent in run:",     _mutated(nodes__hpc__run=["node_agent", "agent"]), "remove node_agent from run:"),
     ("app twice on a node",    _mutated(nodes__hpc__run=["agent", "agent --x 1"]), "'agent' is listed twice"),
+    ("unknown layer",          _mutated(nodes__hpc__layer="fog"),              "layer: must be one of cloud, compute, edge"),
 ]
+
+
+@pytest.mark.parametrize("layer", ["cloud", "compute", "edge"])
+def test_known_layers_pass(fake, layer):
+    fake.scenario(_mutated(nodes__hpc__layer=layer))
+    assert fake.errors() == []
 
 
 @pytest.mark.parametrize("label,data,expected", SCENARIO_BREAKS, ids=[b[0] for b in SCENARIO_BREAKS])

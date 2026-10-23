@@ -1,6 +1,6 @@
 """
 test_result_gui.py — result_gui over DDS, the real window running headless
-(Qt's "offscreen" platform). Behaviour rows G1-G8 in README.md; G4-G6 need
+(Qt's "offscreen" platform). Behaviour rows in README.md: G1-G8, G12-G15, G20; G4-G6 need
 to act on the window itself and are tested in-process at the end.
 """
 import os
@@ -128,6 +128,98 @@ def test_G8_without_pyside_says_how_to_install(bus, start_app, tmp_path):
     app = start_app("result_gui", node=NODE, env=env, wait_heartbeat=False)
     assert app.wait_exit(10) == 2, app.output
     assert "pip install -r bootstrap/requirements.txt" in app.output and "Traceback" not in app.output, app.output
+
+
+# --- the rig as seen over DDS (G10-G15), the real app on temperature-skeleton -------
+# Lines checked are the app's log: one per visible change (R7). The drawing itself
+# is checked in test_drawing.py.
+
+SCENARIO = ("--scenario", "temperature-skeleton")
+STAND_IN = """
+from fw.app import App
+app = App("hpc_monitor", "a stand-in with a heartbeat, for result_gui's tests")
+raise SystemExit(app.run())
+"""
+
+
+@pytest.fixture
+def stand_in(tmp_path):
+    d = tmp_path / "hpc_monitor"
+    d.mkdir()
+    (d / "main.py").write_text(STAND_IN, encoding="utf-8")
+    return d
+
+
+def said(app, text, seconds):
+    """Wait for a line in the app's log (a regex); on time-out, show the log."""
+    import re
+    try:
+        wait_for(lambda: re.search(text, app.output), seconds, repr(text))
+    except AssertionError as e:
+        raise AssertionError(f"{e}\n--- {app.name}'s output ---\n{app.output}") from None
+
+
+@pytest.mark.skipif(not hasattr(__import__("signal"), "SIGSTOP"), reason="pausing a process needs SIGSTOP (Linux)")
+def test_G12_G13_lost_then_back_with_no_restarts(bus, start_app, stand_in):
+    """A paused process stands in for a pulled cable: heartbeats stop, nothing restarts."""
+    import re
+    import signal
+    gui = start(start_app, *SCENARIO)
+    pi = start_app("hpc_monitor", node="hpc-pi", folder=stand_in)
+    said(gui, "machine hpc-pi: up", 5)
+    os.kill(pi.proc.pid, signal.SIGSTOP)
+    t0 = time.monotonic()
+    try:
+        said(gui, "machine hpc-pi: lost", 6)
+        assert time.monotonic() - t0 < 4.5, "lost should show about 3 s after the last heartbeat"
+        assert re.search(r"caption: hpc-pi lost after 3\.\d s · everything else carries on", gui.output), gui.output
+    finally:
+        os.kill(pi.proc.pid, signal.SIGCONT)
+    said(gui, r"caption: hpc-pi back after \d+ s, no restarts", 5)
+
+
+def test_G12_G13_killed_then_restarted(bus, start_app, stand_in):
+    import re
+    gui = start(start_app, *SCENARIO)
+    pi = start_app("hpc_monitor", node="hpc-pi", folder=stand_in)
+    said(gui, "machine hpc-pi: up", 5)
+    pi.kill()
+    said(gui, "machine hpc-pi: lost", 6)
+    start_app("hpc_monitor", node="hpc-pi", folder=stand_in)
+    said(gui, r"caption: hpc-pi back after \d+ s, apps restarted", 10)
+    assert "Traceback" not in gui.output and "ERROR" not in gui.output, gui.output
+
+
+def test_G14_a_crash_reported_by_the_agent(bus, start_app):
+    from fw import types as T
+    gui = start(start_app, *SCENARIO)
+    row = dict(node="hpc-vm", app="hpc_monitor", scenario="temperature-skeleton")
+    w = bus.writer("_sys/AppState")
+    try:
+        bus.send("_sys/AppState", T.AppState(state=T.AppStateKind.APP_RUNNING, **row), to=gui)
+        said(gui, "app hpc-vm/hpc_monitor: running", 5)
+        bus.send("_sys/AppState", T.AppState(state=T.AppStateKind.APP_CRASHED, exit_code=1, **row), to=gui)
+        said(gui, "caption: hpc_monitor on hpc-vm crashed", 5)
+        assert "app hpc-vm/hpc_monitor: crashed" in gui.output
+    finally:                       # the bus is shared by every test: leave no row behind
+        w.dispose_instance(w.lookup_instance(T.AppState(**row)))
+
+
+def test_G15_external_device_data_and_silence(bus, start_app):
+    import re
+    gui = start(start_app, *SCENARIO)
+    twin = start_app("tc397_twin", node="tc397", wait_heartbeat=False)
+    said(gui, "external tc397: data arriving", 10)
+    twin.kill()
+    t0 = time.monotonic()
+    said(gui, "external tc397: no data", 5)
+    assert time.monotonic() - t0 < 3.5, "no data should show about 2 s after the last sample"
+    assert re.search(r"caption: tc397: no data for 2\.\d s", gui.output), gui.output
+
+
+def test_G20_bad_scenario_exits_2_with_a_reason(bus, start_app):
+    app = start(start_app, "--scenario", "no-such-scenario", wait_heartbeat=False)
+    assert app.wait_exit(10) == 2 and "can't read" in app.output and "Traceback" not in app.output, app.output
 
 
 # --- in-process: acting on the window itself (G4, G5, G6) ----------------------------

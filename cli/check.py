@@ -24,7 +24,8 @@ import repo
 
 ERROR, WARN = "ERROR", "WARN"
 
-NODE_KEYS = {"ip", "os", "arch", "run", "external", "sim"}
+NODE_KEYS = {"ip", "os", "arch", "run", "external", "sim", "layer"}
+LAYERS = ("cloud", "compute", "edge")     # result_gui R1: optional; default compute, or edge if external
 SCENARIO_KEYS = {"description", "domain", "nodes"}     # the folder name is the scenario's name
 KNOWN_OS = {"linux", "windows", "qnx", "android", "none"}
 KNOWN_ARCH = {"x86_64", "aarch64", "armv7", "tricore"}
@@ -116,6 +117,9 @@ def _check_nodes(s: repo.Scenario, nodes: dict) -> Iterator[Finding]:
         os_ = spec.get("os", "none" if external else None)
         if not isinstance(os_, str) or os_ not in KNOWN_OS:
             yield Finding(ERROR, where, f"os: must be one of {', '.join(sorted(KNOWN_OS))}, got {os_!r}")
+        layer = spec.get("layer")
+        if layer is not None and layer not in LAYERS:
+            yield Finding(ERROR, where, f"layer: must be one of {', '.join(LAYERS)}, got {layer!r}")
         arch = spec.get("arch", "x86_64")
         if not isinstance(arch, str) or arch not in KNOWN_ARCH:
             yield Finding(WARN, where, f"arch: '{arch}' is not one of {', '.join(sorted(KNOWN_ARCH))}; "

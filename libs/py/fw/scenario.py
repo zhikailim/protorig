@@ -60,6 +60,44 @@ def command_for(app: App) -> tuple[list[str] | None, str]:
     return None, "no main.py or CMakeLists.txt in its folder"
 
 
+LAYERS = ("cloud", "compute", "edge")      # top to bottom on result_gui's screen (R1)
+
+
+def load_nodes(root: Path, scenario: str) -> dict[str, dict]:
+    """The scenario's nodes, in file order ({} if it has none). Raises ValueError
+    with a readable reason if the file can't be read."""
+    f = Path(root) / "scenarios" / scenario / "scenario.yaml"
+    try:
+        data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+    except UnicodeDecodeError:
+        raise ValueError(f"can't read {f}: it isn't UTF-8 text (save it as UTF-8)") from None
+    except (OSError, yaml.YAMLError) as e:
+        raise ValueError(f"can't read {f}: {e}".replace("\n", " ")) from None
+    nodes = data.get("nodes") if isinstance(data, dict) else None
+    if not isinstance(nodes, dict):
+        return {}
+    return {str(n): s for n, s in nodes.items() if isinstance(s, dict)}
+
+
+def layer_of(spec: dict) -> str:
+    """cloud, compute or edge: `layer:` if given, else edge for an external device."""
+    layer = spec.get("layer")
+    if layer in LAYERS:
+        return layer
+    return "edge" if spec.get("external") else "compute"
+
+
+def external_topics(root: Path, node: str) -> list[str]:
+    """The topics an external device publishes, from external/<node>/external.yaml."""
+    f = Path(root) / "external" / node / "external.yaml"
+    try:
+        data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        topics = data.get("topics") or {}
+        return [str(t) for t in topics] if isinstance(topics, dict) else []
+    except (OSError, ValueError, yaml.YAMLError, AttributeError):
+        return []
+
+
 def entries(spec: dict, node: str) -> list[tuple[str, list[str]]]:
     """The (app, args) pairs a node's run: list asks for. Raises ValueError with
     a readable reason if the list can't be read."""
@@ -89,15 +127,8 @@ class Entry:
 def node_entries(root: Path, scenario: str, node: str) -> list[Entry]:
     """What node `node` of `scenario` runs, resolved. Raises ValueError if the
     scenario, the node or its list can't be read (with what to do about it)."""
-    f = root / "scenarios" / scenario / "scenario.yaml"
-    try:
-        data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
-    except UnicodeDecodeError:
-        raise ValueError(f"can't read {f}: it isn't UTF-8 text (save it as UTF-8)") from None
-    except (OSError, yaml.YAMLError) as e:
-        raise ValueError(f"can't read {f}: {e}".replace("\n", " ")) from None
-    nodes = data.get("nodes") if isinstance(data, dict) else None
-    if not isinstance(nodes, dict) or node not in nodes or not isinstance(nodes[node], dict):
+    nodes = load_nodes(root, scenario)
+    if node not in nodes:
         raise ValueError(f"scenario '{scenario}' has no node '{node}'")
     if nodes[node].get("external"):
         raise ValueError(f"'{node}' is an external node: nothing runs there from this repo")

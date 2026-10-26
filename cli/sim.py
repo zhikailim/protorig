@@ -85,6 +85,8 @@ class SimLive(livemod.Live):
                     else:
                         self.give_up = True           # at start: it won't come up, stop waiting
                 livemod.say(f"{who} ended by itself: {describe_exit(p.returncode)}{hint}")
+                if self.alive and not who.endswith("/" + AGENT):
+                    self.rest_keeps_running()         # a twin gone mid-demo (B14)
 
 
 def main(args, data: dict, common: list[str], env: dict) -> int:

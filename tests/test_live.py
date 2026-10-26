@@ -216,6 +216,7 @@ def test_brings_the_rig_up_and_down(rig, bus, live_procs):
     assert p.finish() == 0
     assert "desk/probe STOPPED: stopped by desk/run-live" in p.output
     assert "how each app ended: desk/probe STOPPED; the agents stay up" in p.output
+    assert "the rest keeps running" not in p.output, "B14 is for mid-demo ends, not Ctrl-C's stop"
     assert agent(rig, "status", bus, SCEN, "--node", "desk").returncode == 0     # the agent stays up
     assert "[RTI LICENSE]" not in p.output
 
@@ -272,7 +273,9 @@ def test_crash_after_everything_is_running_counts_as_failed(rig, bus, live_procs
     p = live(rig, bus, live_procs, "--start-timeout", "2")
     p.wait_for("every app is RUNNING", timeout=10)
     p.wait_for("desk/crasher CRASHED: boom", timeout=10)
+    p.wait_for("the rest keeps running; press Ctrl-C here to stop the demo")   # B14
     assert p.finish() == 1 and "failed: desk/crasher" in p.output
+    assert p.output.count("the rest keeps running") == 1, "once per run, not on the final stop"
 
 
 def test_reattaches_to_a_running_demo(rig, bus, live_procs):

@@ -213,3 +213,9 @@ B13. An agent that ends by itself is reported at once, and `--sim` stops
      An agent that ends by itself mid-demo is reported with the hint "Its
      apps stopped with it; Ctrl-C and run again to bring it back"; the other
      nodes carry on.
+
+B14. `--sim` and `--live`: the first time an app that was RUNNING ends
+     mid-demo (closed, crashed, killed), or a twin ends, `run` adds once:
+     "the rest keeps running; press Ctrl-C here to stop the demo", so the
+     console never looks hung (approved 26 Oct 2026, after closing
+     result_gui's window left the console waiting).

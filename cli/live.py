@@ -170,6 +170,8 @@ class Live:
         self.data = data
         self.stopping = threading.Event()
         self.failed: set[str] = set()             # "node/app" that failed (exit code 1)
+        self.ran: set[str] = set()                # "node/app" seen RUNNING in this run
+        self.hinted = False                       # B14: the "rest keeps running" line, once
         self.give_up = False                      # sim: one of its own agents died
         self.alive: set[str] = set()
 
@@ -254,7 +256,7 @@ class Live:
             for r in rig.take_rows():
                 if r.node in targets and r.app != "node_agent":
                     changed.add(r.node)
-                    self.print_row(r)
+                    self.print_row(r, mid_demo=True)
             self.watch_rest(rig, ext_topics, targets)
             now = time.monotonic()
             for n, (cid, when, resent) in list(sent.items()):     # U11 step 3: once, same cmd_id
@@ -323,11 +325,22 @@ class Live:
         for r in rows:
             out(f"    {r.app:<{width}}  {short(r.state):<11}  {r.detail}".rstrip())
 
-    def print_row(self, r) -> None:
-        state = short(r.state)
+    def print_row(self, r, mid_demo: bool = False) -> None:
+        state, who = short(r.state), f"{r.node}/{r.app}"
         if state == "CRASHED":
-            self.failed.add(f"{r.node}/{r.app}")
-        say(f"{r.node}/{r.app} {state}" + (f": {r.detail}" if r.detail else ""))
+            self.failed.add(who)
+        say(f"{who} {state}" + (f": {r.detail}" if r.detail else ""))
+        if state == "RUNNING":
+            self.ran.add(who)
+        elif mid_demo and who in self.ran and state in ENDED:
+            self.rest_keeps_running()
+
+    def rest_keeps_running(self) -> None:
+        """B14: something ended mid-demo and run carries on; say so once, so the
+        console doesn't look hung (e.g. after closing result_gui's window)."""
+        if not self.hinted:
+            self.hinted = True
+            out("    the rest keeps running; press Ctrl-C here to stop the demo")
 
     def watch_ext(self, rig: Rig, ext_topics) -> None:
         for n, topics in ext_topics.items():

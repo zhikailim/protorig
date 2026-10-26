@@ -173,6 +173,8 @@ def test_domain_override(rig):
     (["--sim"], "which scenario?"),
     ([SAMPLE, "--sim", "--bogus"], "unknown argument"),
     (["--dry-run", "--app", "missing_app"], "SKIPPED, no such app yet"),
+    ([SAMPLE, "--dry-run", "--app", "probe:"], "SKIPPED, no such app; did you mean 'probe'?"),   # a copied colon
+    ([SAMPLE, "--dry-run", "--app", "prboe"], "SKIPPED, no such app; did you mean 'probe'?"),    # a typo
     (["--app", "missing_app"], "nothing to start"),
     (["--bogus", "--app", "probe"], "run's options go before --app"),
 ])

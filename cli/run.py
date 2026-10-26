@@ -30,7 +30,7 @@ import repo
 sys.path.insert(0, str(repo.ROOT / "libs" / "py"))
 from fw.app import NODE_QOS_ENV            # noqa: E402
 from fw.supervise import EXIT_KILLED, Supervised   # noqa: E402
-from fw.scenario import command_for                 # noqa: E402  (shared with node_agent)
+from fw.scenario import command_for, no_such_app    # noqa: E402  (shared with node_agent)
 from fw import scenario as fw_scenario              # noqa: E402
 
 STOP_GRACE = 10.0      # seconds apps get to stop politely before they are forced
@@ -58,9 +58,10 @@ class RunError(Exception):
 
 def resolve(scenario: str | None, name: str, node: str, args: list[str], want_sim: bool = False) -> Launch:
     """A Launch for app `name` as seen from `scenario` (its own apps first, then shared)."""
-    hits = repo.find_apps(scenario).get(name) or []
+    apps = repo.find_apps(scenario)
+    hits = apps.get(name) or []
     if not hits:
-        return Launch(node, name, args, missing="no such app yet (create it with `protorig new app`)")
+        return Launch(node, name, args, missing=no_such_app(name, apps))
     app = hits[0]
     if want_sim and app.kind != "sim":
         return Launch(node, name, args, missing=f"is in apps/{app.kind}/, but a twin must be in apps/sim/")

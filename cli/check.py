@@ -181,8 +181,10 @@ def _resolve(apps, name: str, where: str, want_kind: str | None = None,
         return
     found = apps.get(name, [])
     if not found:
+        from fw.scenario import did_you_mean
         kind_hint = f"apps/{want_kind}/" if want_kind else "apps/vehicle|tooling/"
-        yield Finding(ERROR, where, f"app '{name}' not found (looked in the scenario's apps/ and {kind_hint})")
+        yield Finding(ERROR, where, f"app '{name}' not found (looked in the scenario's apps/ and {kind_hint})"
+                                    f"{did_you_mean(name, apps)}")
         return
     # Scenario-local apps shadow shared ones on purpose; only same-scope duplicates are ambiguous.
     top_scope = found[0].scope

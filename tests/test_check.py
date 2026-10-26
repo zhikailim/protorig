@@ -125,6 +125,7 @@ SCENARIO_BREAKS = [
     ("loopback IP",            _mutated(nodes__hpc__ip="127.0.0.1"),           "can't be reached"),
     ("missing IP",             _mutated(nodes__hpc__ip=DELETE),                "not a valid IPv4"),
     ("unknown app",            _mutated(nodes__hpc__run=["agent", "ghost"]),   "'ghost' not found"),
+    ("misspelt app",           _mutated(nodes__hpc__run=["agnet"]),            "did you mean 'agent'?"),
     ("sim twin in run:",       _mutated(nodes__hpc__run=["ecu_twin"]),         "is a sim twin"),
     ("non-sim as sim:",        _mutated(nodes__ecu__sim="gui"),                "must name an app in apps/sim"),
     ("missing sim app",        _mutated(nodes__ecu__sim="nope_twin"),          "'nope_twin' not found"),

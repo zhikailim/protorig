@@ -98,6 +98,20 @@ def external_topics(root: Path, node: str) -> list[str]:
         return []
 
 
+def did_you_mean(name: str, known) -> str:
+    """ "; did you mean 'x'?" for a close app name, else "". A close match is
+    most likely a typo, or a character copied along (e.g. "tc397_twin:")."""
+    import difflib
+    close = difflib.get_close_matches(name.strip(" :;,.'\"`"), list(known), n=1, cutoff=0.75)
+    return f"; did you mean '{close[0]}'?" if close else ""
+
+
+def no_such_app(name: str, known) -> str:
+    """Why an app can't be started."""
+    return ("no such app" + did_you_mean(name, known)) if did_you_mean(name, known) \
+        else "no such app yet (create it with `protorig new app`)"
+
+
 def entries(spec: dict, node: str) -> list[tuple[str, list[str]]]:
     """The (app, args) pairs a node's run: list asks for. Raises ValueError with
     a readable reason if the list can't be read."""
@@ -137,7 +151,7 @@ def node_entries(root: Path, scenario: str, node: str) -> list[Entry]:
     for name, args in entries(nodes[node], node):
         hits = apps.get(name) or []
         if not hits:
-            out.append(Entry(name, args, missing="no such app (create it with `protorig new app`)"))
+            out.append(Entry(name, args, missing=no_such_app(name, apps)))
             continue
         cmd, why = command_for(hits[0])
         out.append(Entry(name, args, cmd, why))

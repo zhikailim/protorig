@@ -159,8 +159,9 @@ class Agent:
                                         time.monotonic()))
 
     def refresh(self, name: str) -> None:
-        hits = fw_scenario.find_apps(ROOT, self.app.scenario).get(name) or []
-        cmd, why = fw_scenario.command_for(hits[0]) if hits else (None, "no such app (create it with `protorig new app`)")
+        apps = fw_scenario.find_apps(ROOT, self.app.scenario)
+        hits = apps.get(name) or []
+        cmd, why = fw_scenario.command_for(hits[0]) if hits else (None, fw_scenario.no_such_app(name, apps))
         self.cmds[name] = cmd
         self.carry_out(self.ctl.set_available(name, cmd is not None, why, time.monotonic()))
 

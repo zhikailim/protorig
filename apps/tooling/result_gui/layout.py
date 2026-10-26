@@ -147,5 +147,50 @@ def _pills(box: Box, n: int, rect: Rect, top: float, inner: float, word_px: int,
         shown = max(1, int((room + gap) // (h + gap)))
         box.more = n - shown + 1 if shown < n else 0
     for i in range(shown):
-        box.pills.append(Rect(rect.x + inner, top + i * (h + gap), rect.w - 2 * inner, h))
+        # Room kept on the right for links between apps of this machine (shared memory).
+        box.pills.append(Rect(rect.x + inner, top + i * (h + gap), rect.w - 2 * inner - word_px, h))
     return min(pill_px, max(10, round(h * 0.55)))
+
+
+# --- links (R2) ---------------------------------------------------------------------
+
+def anchor(box: Box, index: int | None) -> Rect | None:
+    """The pill an app's links start or end at: its own, or "+N more" if it isn't
+    shown. None: the machine itself (a device has no apps drawn)."""
+    if index is None or not box.pills:
+        return None
+    return box.pills[min(index, len(box.pills) - 1)]
+
+
+def route(lay: Layout, wbox: Box, wpill: Rect | None, rbox: Box, rpill: Rect | None,
+          lane: int, lanes: int):
+    """A link's path as points, plus its arrow (tip, from) at the reader's end.
+    Two machines: out of the writer's cable, through the switch, into the
+    reader's cable (UDP). One machine: a short bracket beside its pills (shared
+    memory). Each topic has its own lane, so links of different topics never
+    lie on top of each other."""
+    gap = min(max(6.0, lay.word_px * 0.6), lay.switch.h * 0.8 / max(lanes, 1))   # lanes fit in the switch
+    dx = (lane - (lanes - 1) / 2) * gap
+    if wbox is rbox and wpill is not None and rpill is not None:
+        margin = wbox.rect.right - max(wpill.right, rpill.right)       # the room _pills() keeps
+        x = max(wpill.right, rpill.right) + margin * (0.3 + 0.4 * lane / max(lanes - 1, 1))
+        pts = [(wpill.right, wpill.y + wpill.h * 0.35), (x, wpill.y + wpill.h * 0.35),
+               (x, rpill.y + rpill.h * 0.65), (rpill.right, rpill.y + rpill.h * 0.65)]
+        return pts, pts[-1], pts[-2]
+    sw = lay.switch
+    y_mid = sw.y + sw.h / 2 + dx
+
+    def side(box: Box, pill: Rect | None) -> list[tuple[float, float]]:
+        """From an app (or the machine) to the middle of the switch, in that order."""
+        port = (box.port[0] + dx, box.port[1])
+        start = (port[0], pill.y + pill.h / 2) if pill is not None else port    # straight up from the cable
+        plug_x, plug_y = box.plug[0] + dx, box.plug[1]
+        if plug_y in (sw.y, sw.bottom):
+            into = [(plug_x, plug_y), (plug_x, y_mid)]
+        else:                                          # the cloud: over the WAN, into the switch's top
+            into = [(plug_x, plug_y), (sw.cx + dx, sw.y), (sw.cx + dx, y_mid)]
+        return [start, port] + into
+    w, r = side(wbox, wpill), side(rbox, rpill)
+    pts = w + list(reversed(r))
+    port_r = r[1]
+    return pts, port_r, r[2]

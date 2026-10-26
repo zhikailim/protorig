@@ -5,7 +5,7 @@ import traceback
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from layout import MIN_H, MIN_W, Rect, layout
+from layout import MIN_H, MIN_W, Rect, anchor, layout, route
 from model import BAD, IDLE, OK, WARN, Model
 
 from fw.app import log
@@ -13,6 +13,8 @@ from fw.app import log
 BG, BAND, BOX, PILL, LINE = "#0f1216", "#151a21", "#161b22", "#1f2630", "#5b6470"
 TEXT, DIM = "#e8eaed", "#7d8590"
 TONE = {OK: "#3fb950", BAD: "#f85149", WARN: "#d29922", IDLE: "#7d8590"}
+# Topic colours: none of them green, red, amber or grey, which mean a state (R1).
+TOPIC = ["#58a6ff", "#bc8cff", "#39c5cf", "#f778ba", "#ffa657", "#a5d6ff"]
 REDRAW_MS = 100
 
 
@@ -90,9 +92,13 @@ class Window(QtWidgets.QWidget):
             p.drawLine(QtCore.QPointF(*b.port), QtCore.QPointF(*b.plug))
         s = lay.switch
         self._box(p, s, PILL, LINE, 2)
-        self._text(p, s, "switch", DIM, lay.word_px, align=QtCore.Qt.AlignmentFlag.AlignCenter)
+        self._text(p, s, "  switch", DIM, lay.word_px)   # at its left end: links cross its middle
         for m in view.machines:
             self._machine(p, m, lay.boxes[m.name], lay)
+        self._links(p, view, lay)                  # over the boxes, under the pills
+        for m in view.machines:
+            self._pills(p, m, lay.boxes[m.name], lay)
+        self._legend(p, view, lay)
         if view.caption:
             colour = QtGui.QColor(TEXT)
             colour.setAlphaF(view.caption_alpha)
@@ -109,6 +115,58 @@ class Window(QtWidgets.QWidget):
         p.drawEllipse(QtCore.QPointF(x, y), r, r)
         word = QtCore.QRectF(b.state.x + 3 * r, b.state.y, b.state.w - 3 * r, b.state.h)
         self._text(p, word, m.word, tone, lay.word_px, bold=True)
+
+    def _links(self, p, view, lay):
+        """R2: each link along its physical path, coloured by topic; dim and dashed
+        when an end is lost or silent (R3); an arrow where it enters the reader."""
+        apps = {m.name: [a.name for a in m.apps] for m in view.machines}
+        lane = {t: i for i, (t, _) in enumerate(view.topics)}
+        for k in view.links:
+            (wn, wa), (rn, ra) = k.writer, k.reader
+            wb, rb = lay.boxes[wn], lay.boxes[rn]
+            wp = anchor(wb, apps[wn].index(wa) if wa in apps[wn] else None)
+            rp = anchor(rb, apps[rn].index(ra) if ra in apps[rn] else None)
+            if wb is rb and wp is rp:
+                continue                           # both apps hidden under "+N more"
+            pts, tip, back = route(lay, wb, wp, rb, rp, lane[k.topic], len(lane))
+            colour = QtGui.QColor(TOPIC[k.colour % len(TOPIC)])
+            p.setOpacity(0.35 if k.dim else 1.0)
+            p.setPen(self._pen(colour, 3, dashed=k.dim))
+            p.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+            p.drawPolyline([QtCore.QPointF(x, y) for x, y in pts])
+            self._arrow(p, tip, back, colour, lay.word_px * 0.7)
+        p.setOpacity(1.0)
+
+    def _arrow(self, p, tip, back, colour, size):
+        import math
+        dx, dy = tip[0] - back[0], tip[1] - back[1]
+        n = math.hypot(dx, dy) or 1.0
+        ux, uy = dx / n, dy / n
+        base = (tip[0] - ux * size, tip[1] - uy * size)
+        left = QtCore.QPointF(base[0] - uy * size * 0.6, base[1] + ux * size * 0.6)
+        right = QtCore.QPointF(base[0] + uy * size * 0.6, base[1] - ux * size * 0.6)
+        p.setPen(QtCore.Qt.PenStyle.NoPen)
+        p.setBrush(colour)
+        p.drawPolygon([QtCore.QPointF(*tip), left, right])
+
+    def _legend(self, p, view, lay):
+        """Which colour is which topic, right-aligned on the title line."""
+        f = self._font(lay.label_px, bold=True)
+        fm = QtGui.QFontMetricsF(f)
+        x, y = lay.title.right, lay.title.y + lay.title.h / 2
+        for topic, colour in reversed(view.topics):
+            w = fm.horizontalAdvance(topic)
+            x -= w
+            if x < lay.title.x + lay.title.w * 0.4:
+                break                              # never over the scenario's name
+            self._text(p, QtCore.QRectF(x, lay.title.y, w + 2, lay.title.h), topic, TEXT, lay.label_px, bold=True)
+            r = lay.label_px * 0.35
+            p.setPen(QtCore.Qt.PenStyle.NoPen)
+            p.setBrush(QtGui.QColor(TOPIC[colour % len(TOPIC)]))
+            p.drawEllipse(QtCore.QPointF(x - r * 2, y), r, r)
+            x -= r * 6
+
+    def _pills(self, p, m, b, lay):
         if m.word == "lost":
             p.setOpacity(0.45)                     # nothing is known about a lost machine's apps
         for i, pill in enumerate(b.pills):

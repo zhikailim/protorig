@@ -3,12 +3,12 @@ result_gui — the "under the hood" screen: the rig as it really is, where the
 data goes, and what happens when something fails (docs/requirements/result_gui.md).
 
 Topics in : _sys/NodeStatus, _sys/AppState, the topics of each external device
-            (external/<node>/external.yaml)
+            (external/<node>/external.yaml), Connext's discovery data (for links)
 Topics out: none but its heartbeat
 Arguments : --silence (seconds, default 2), plus the standard ones
 
-Merge 2 of 4: machines in their layers, up / lost / not seen yet, app states,
-captions (R1, R3). DDS is read here only; model.py works out what to show,
+Merges 2-3 of 4: machines in their layers, up / lost / not seen yet, app states,
+captions (R1, R3); links between writers and readers (R2). DDS is read here only; model.py works out what to show,
 window.py draws it.
 
 Run alone:  ./protorig run <scenario> --app result_gui
@@ -22,9 +22,11 @@ from fw.app import DDS_ERRORS, ROOT, App, log
 from fw.gui import run_gui
 from fw.scenario import entries, external_topics, layer_of, load_nodes
 from fw.topics import TOPICS
+import links as L
 from model import Model
 
 POLL = 0.25          # how often heartbeats and app rows are read (seconds)
+LINKS_EVERY = 1.0    # how often links are worked out again from discovery (seconds)
 
 app = App("result_gui", "The rig as it really is: machines, data links, failures, alerts")
 silence = app.arg("--silence", 2.0, "seconds without data before an external device shows 'no data'")
@@ -35,7 +37,7 @@ def scenario_nodes() -> dict:
     if app.scenario and not app.help_requested:
         for name, spec in load_nodes(ROOT, app.scenario).items():
             nodes[name] = {"layer": layer_of(spec), "external": bool(spec.get("external")),
-                           "run": [a for a, _ in entries(spec, name)]}
+                           "run": [a for a, _ in entries(spec, name)], "ip": spec.get("ip")}
     return nodes
 
 
@@ -104,6 +106,29 @@ if not app.help_requested:
             continue
         app.on_data(app.reader(topic),
                     lambda _s, owners=owners: [model.data(n, time.monotonic()) for n in owners])
+
+    # Links (R2): Connext's own discovery data, read with its built-in readers. Every
+    # participant already receives it, so this puts nothing extra on the network.
+    builtin = app.participant.builtin_subscriber
+    pubs = dds.PublicationBuiltinTopicData.DataReader.find_all_by_topic(builtin, "DCPSPublication")[0]
+    subs = dds.SubscriptionBuiltinTopicData.DataReader.find_all_by_topic(builtin, "DCPSSubscription")[0]
+
+    def alive(reader) -> list:
+        return [L.endpoint(d) for d, info in reader.read()
+                if info.valid and info.state.instance_state == dds.InstanceState.ALIVE]
+
+    def find_links():
+        who = {}
+        for h in app.participant.discovered_participants():
+            try:
+                p = L.participant(app.participant.discovered_participant_data(h))
+                who[p.key] = L.place(p, nodes)
+            except DDS_ERRORS:                 # it left meanwhile
+                pass
+        found = [(w.topic, who.get(w.participant), who.get(r.participant))
+                 for w, r in L.matches(alive(pubs), alive(subs))]
+        model.links([(t, w, r) for t, w, r in found if w and r])
+    app.every(LINKS_EVERY, find_links)
 
 
 def make_window():

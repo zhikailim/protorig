@@ -20,9 +20,9 @@ import yaml
 import idl
 import repo
 from check import ERROR, WARN, Finding, check
+from fw.qos_match import INFINITE, incompatibilities, qos_dict as _qos_dict   # noqa: E402  (shared with result_gui)
 
 RESERVED_MODULES = {"fw"}
-INFINITE = 2147483647          # Connext's "infinite" duration, in seconds
 QOS_FILES = ("base.xml", "topics.xml", "variants.xml")
 DEFAULT_PROFILE = "protorig::Topics"
 VARIANT_LIBRARY = "protorig_variants"
@@ -358,18 +358,6 @@ def check_externals() -> Iterator[Finding]:
 # 5. QoS: valid XML, loads in Connext, compatible with external writers
 # ---------------------------------------------------------------------------
 
-DURABILITY_RANK = {"VOLATILE": 0, "TRANSIENT_LOCAL": 1, "TRANSIENT": 2, "PERSISTENT": 3}
-LIVELINESS_RANK = {"AUTOMATIC": 0, "MANUAL_BY_PARTICIPANT": 1, "MANUAL_BY_TOPIC": 2}
-
-
-def _name(kind) -> str:
-    return str(kind).split(".")[-1]
-
-
-def _secs(duration) -> float:
-    return INFINITE if duration.sec >= INFINITE else duration.sec + duration.nanosec / 1e9
-
-
 def _offer_from_yaml(w: dict) -> dict:
     def dur(v):
         return INFINITE if v in (None, "infinite", "inf") else float(v)
@@ -381,34 +369,6 @@ def _offer_from_yaml(w: dict) -> dict:
             "ownership": str(w.get("ownership", "SHARED")).upper()}
 
 
-def _qos_dict(q) -> dict:
-    return {"reliability": _name(q.reliability.kind), "durability": _name(q.durability.kind),
-            "deadline": _secs(q.deadline.period), "liveliness_kind": _name(q.liveliness.kind),
-            "liveliness_lease": _secs(q.liveliness.lease_duration), "ownership": _name(q.ownership.kind)}
-
-
-def incompatibilities(offered: dict, requested: dict) -> list[str]:
-    """Why a reader requesting `requested` would NOT match a writer offering `offered`
-    (DDS request/offer rules). Empty list = compatible."""
-    why = []
-    if requested["reliability"] == "RELIABLE" and offered["reliability"] != "RELIABLE":
-        why.append("reader wants RELIABLE, writer offers BEST_EFFORT")
-    if DURABILITY_RANK.get(requested["durability"], 0) > DURABILITY_RANK.get(offered["durability"], 0):
-        why.append(f"reader wants {requested['durability']} durability, writer offers {offered['durability']}")
-    if requested["deadline"] < offered["deadline"]:
-        why.append(f"reader wants a {_fmt_s(requested['deadline'])} deadline, writer offers {_fmt_s(offered['deadline'])}")
-    if LIVELINESS_RANK.get(requested["liveliness_kind"], 0) > LIVELINESS_RANK.get(offered["liveliness_kind"], 0):
-        why.append(f"reader wants {requested['liveliness_kind']} liveliness, writer offers {offered['liveliness_kind']}")
-    if requested["liveliness_lease"] < offered["liveliness_lease"]:
-        why.append(f"reader wants a {_fmt_s(requested['liveliness_lease'])} liveliness lease, "
-                   f"writer offers {_fmt_s(offered['liveliness_lease'])}")
-    if requested["ownership"] != offered["ownership"]:
-        why.append(f"ownership differs ({requested['ownership']} vs {offered['ownership']})")
-    return why
-
-
-def _fmt_s(v: float) -> str:
-    return "infinite" if v >= INFINITE else f"{v:g} s"
 
 
 def load_qos_provider(dds):

@@ -44,10 +44,22 @@ class MachineView:
 
 
 @dataclass(frozen=True)
+class LinkView:
+    """A writer that reaches a reader (R2). app None: the device itself (an ECU)."""
+    topic: str
+    colour: int                # index into the window's topic palette, stable per topic
+    writer: tuple[str, str | None]     # (node, app)
+    reader: tuple[str, str | None]
+    dim: bool                  # an end is lost, stopped or silent (R3)
+
+
+@dataclass(frozen=True)
 class View:
     machines: tuple[MachineView, ...]
     caption: str
     caption_alpha: float       # 1 = fully visible, 0 = gone
+    links: tuple[LinkView, ...] = ()
+    topics: tuple[tuple[str, int], ...] = ()   # the legend: (topic, colour) of the links shown
 
 
 @dataclass
@@ -81,6 +93,8 @@ class Model:
         self._rows: dict[tuple[str, str], tuple[str, str]] = {}   # (node, app) -> (kind, detail)
         self._caption, self._caption_at = "", -1e9
         self._log: list[str] = []
+        self._links: set[tuple] = set()            # (topic, w_node, w_app, r_node, r_app)
+        self._colour: dict[str, int] = {}          # topic -> palette index, kept once given
 
     # ---------------------------------------------------------------- feeds (DDS thread)
 
@@ -119,6 +133,31 @@ class Model:
             m = self._m.get(node)
             if m is not None:
                 m.last_data = now
+
+    def links(self, found) -> None:
+        """Every writer -> reader pair Connext would match, as
+        (topic, (w_node, w_app), (r_node, r_app)). Plumbing (_sys/ topics), presenter
+        tools and nodes outside the scenario are left out here, in one place."""
+        def end(e):                        # an external device is drawn as one box: no apps
+            node, app = e
+            m = self._m.get(node)
+            if m is None or app in HIDDEN or (app is None and not m.external):
+                return None
+            return (node, None) if m.external else (node, app)
+        ends = [(t, end(w), end(r)) for t, w, r in found if not t.startswith("_sys/")]
+        new = {(t, *w, *r) for t, w, r in ends if w and r and w != r}
+        with self._lock:
+            for t in sorted({x[0] for x in new} - set(self._colour)):
+                self._colour[t] = len(self._colour)
+            for x in sorted(new - self._links):
+                self._log.append(f"link {x[0]}: {self._who(x[1], x[2])} -> {self._who(x[3], x[4])}")
+            for x in sorted(self._links - new):
+                self._log.append(f"link gone {x[0]}: {self._who(x[1], x[2])} -> {self._who(x[3], x[4])}")
+            self._links = new
+
+    @staticmethod
+    def _who(node, app):
+        return f"{node}/{app}" if app else node
 
     # ---------------------------------------------------------------- tick (DDS thread)
 
@@ -202,11 +241,18 @@ class Model:
             machines = []
             for m in self._m.values():
                 heard = {a for (n, a) in list(self._beats) + list(self._rows) if n == m.name}
+                if not m.external:                 # an app heard only through its data is drawn too
+                    heard |= {x[2] for x in self._links if x[1] == m.name}
+                    heard |= {x[4] for x in self._links if x[3] == m.name}
                 apps = [a for a in m.run if a not in HIDDEN]
                 apps += sorted(heard - set(apps) - HIDDEN)
                 tone = {"up": OK, "data arriving": OK, "lost": BAD, "no data": BAD}.get(m.word, IDLE)
                 machines.append(MachineView(m.name, m.layer, m.external, m.word, tone,
                                             tuple(self._app_view(m, a) for a in apps)))
+            quiet = {m.name for m in self._m.values() if m.word not in ("up", "data arriving")}
+            links = tuple(LinkView(t, self._colour[t], (wn, wa), (rn, ra), wn in quiet or rn in quiet)
+                          for t, wn, wa, rn, ra in sorted(self._links))
+            topics = tuple(sorted({(x.topic, x.colour) for x in links}, key=lambda tc: tc[1]))
             age = now - self._caption_at
             alpha = 1.0 if age < CAPTION_FOR - FADE else max(0.0, (CAPTION_FOR - age) / FADE)
-            return View(tuple(machines), self._caption if alpha > 0 else "", alpha)
+            return View(tuple(machines), self._caption if alpha > 0 else "", alpha, links, topics)

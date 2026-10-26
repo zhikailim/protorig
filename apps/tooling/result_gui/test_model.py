@@ -225,3 +225,67 @@ def test_R1_layer_from_the_scenario():
         "windows": "compute", "hpc-vm": "compute", "hpc-pi": "compute", "tc397": "edge"}
     assert external_topics(ROOT, "tc397") == ["Example Temperature"]
     assert external_topics(ROOT, "no-such-node") == []
+
+
+# --- links (merge 3, R2) -------------------------------------------------------------
+
+LINKS = [("Example Temperature", ("tc397", "tc397_twin"), ("hpc-pi", "hpc_monitor")),
+         ("Alert", ("hpc-pi", "hpc_monitor"), ("windows", "ivi_standin"))]
+
+
+def test_G21_links_shown_with_a_log_line_each():
+    m = model()
+    m.links(LINKS)
+    log = m.tick(0.0)
+    v = m.snapshot(0.0)
+    assert {(k.topic, k.writer, k.reader) for k in v.links} == {
+        ("Example Temperature", ("tc397", None), ("hpc-pi", "hpc_monitor")),     # the device itself
+        ("Alert", ("hpc-pi", "hpc_monitor"), ("windows", "ivi_standin"))}
+    assert "link Alert: hpc-pi/hpc_monitor -> windows/ivi_standin" in log
+    assert "link Example Temperature: tc397 -> hpc-pi/hpc_monitor" in log
+    assert [t for t, _ in v.topics] == ["Alert", "Example Temperature"]
+    m.links(LINKS[:1])
+    assert "link gone Alert: hpc-pi/hpc_monitor -> windows/ivi_standin" in m.tick(1.0)
+
+
+def test_G25_plumbing_presenter_tools_and_strangers_left_out():
+    m = model()
+    m.links([("_sys/NodeStatus", ("hpc-pi", "hpc_monitor"), ("windows", "ivi_standin")),
+             ("Alert", ("hpc-pi", "node_agent"), ("windows", "ivi_standin")),
+             ("Alert", ("hpc-pi", "hpc_monitor"), ("windows", "result_gui")),
+             ("Alert", ("test", "bus"), ("windows", "ivi_standin")),
+             ("Alert", ("hpc-pi", None), ("windows", "ivi_standin")),        # only a device has no app
+             ("Alert", ("hpc-pi", "hpc_monitor"), ("hpc-pi", "hpc_monitor"))])  # an app to itself
+    m.tick(0.0)
+    assert m.snapshot(0.0).links == ()
+
+
+def test_colours_stay_with_their_topic():
+    m = model()
+    m.links(LINKS)
+    first = {k.topic: k.colour for k in m.snapshot(0.0).links}
+    m.links([("Zebra", ("hpc-pi", "hpc_monitor"), ("windows", "ivi_standin"))] + LINKS)
+    again = {k.topic: k.colour for k in m.snapshot(0.0).links}
+    assert again["Alert"] == first["Alert"] and again["Example Temperature"] == first["Example Temperature"]
+    assert len(set(again.values())) == 3
+
+
+def test_G26_links_dim_when_an_end_is_lost():
+    m = model()
+    up(m, 0.0)
+    m.links(LINKS)
+    m.tick(0.0)
+    assert not any(k.dim for k in m.snapshot(0.0).links)
+    for app in ("node_agent", "hpc_monitor"):
+        beat(m, "hpc-pi", app, 1, 3.5, state="lost")
+    m.data("tc397", 3.5)
+    m.tick(3.5)
+    assert all(k.dim for k in m.snapshot(3.5).links), "both links touch hpc-pi"
+
+
+def test_an_app_heard_only_through_its_data_gets_a_pill():
+    m = model()
+    m.links([("Alert", ("hpc-pi", "logger"), ("windows", "ivi_standin"))])
+    v = m.snapshot(0.0)
+    assert "logger" in [a.name for a in machine(v, "hpc-pi").apps]
+    assert machine(v, "tc397").apps == ()

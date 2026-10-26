@@ -16,7 +16,7 @@ import pytest
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 sys.path.insert(0, str(HERE))
-from layout import MIN_H, MIN_W, layout   # noqa: E402
+from layout import MIN_H, MIN_W, anchor, layout, route   # noqa: E402
 from model import Model                    # noqa: E402
 
 SIZES = [(MIN_W, MIN_H), (1280, 720), (1366, 768), (1920, 1080), (3840, 2160), (1000, 1000), (2560, 600)]
@@ -126,8 +126,14 @@ def rig_model(now):
         m.heartbeat("hpc-pi", app, 1, "lost", now)
     m.app_row("hpc-vm", "hpc_monitor", "APP_CRASHED", "", now)
     m.data("tc397", now)
+    m.links(RIG_LINKS)
     m.tick(now)
     return m
+
+
+RIG_LINKS = [("Example Temperature", ("tc397", "tc397_twin"), ("hpc-vm", "hpc_monitor")),   # lit
+             ("Alert", ("hpc-pi", "hpc_monitor"), ("windows", "ivi_standin")),             # dim: hpc-pi lost
+             ("Alert", ("windows", "ivi_standin"), ("windows", "logger"))]                 # shared memory
 
 
 def render(qt, model, size, name):
@@ -204,3 +210,51 @@ def test_G19_a_drawing_error_is_logged_not_fatal(qt, capfd):
     img, _ = render(qt, Broken({}, 2.0), (1280, 720), "broken")
     out = capfd.readouterr().out
     assert img.width() == 1280 and "drawing failed" in out and "boom (test)" in out
+
+
+# --- links (merge 3, R2) -------------------------------------------------------------
+
+@pytest.mark.parametrize("case,size", list(itertools.product(CASES, SIZES)), ids=str)
+def test_G23_link_routes_stay_inside_the_window(case, size):
+    """Every machine to every other (and to itself): all points inside the window,
+    through both machines' cables, never into another machine's box."""
+    machines = CASES[case]
+    lay = layout(machines, *size)
+    names = [m[0] for m in machines]
+    layer_of = {m[0]: m[1] for m in machines}
+    for (wn, rn), lane in zip(itertools.product(names, names), itertools.cycle(range(3))):
+        wb, rb = lay.boxes[wn], lay.boxes[rn]
+        wp, rp = anchor(wb, 0), anchor(rb, 1 if wb is rb else 0)
+        if wb is rb and (wp is None or wp is rp):
+            continue
+        pts, tip, back = route(lay, wb, wp, rb, rp, lane, 3)
+        for x, y in pts:
+            assert 0 <= x <= lay.window.w and 0 <= y <= lay.window.h, f"{wn}->{rn}: {(x, y)} outside"
+        if wb is rb:                                   # shared memory: beside the pills, in the box
+            assert all(wb.rect.x < x < wb.rect.right and wb.rect.y < y < wb.rect.bottom for x, y in pts)
+            assert all(x >= max(wp.right, rp.right) for x, _ in pts)
+        else:
+            assert abs(tip[1] - rb.port[1]) < 0.01, "the arrow sits where the link enters the reader"
+            if "cloud" in (layer_of[wn], layer_of[rn]):
+                continue                               # known: a cloud link crosses the compute row
+            others = [b.rect for n, b in lay.boxes.items() if n not in (wn, rn)]
+            for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+                for k in (0.25, 0.5, 0.75):
+                    x, y = x1 + (x2 - x1) * k, y1 + (y2 - y1) * k
+                    assert not any(r.x < x < r.right and r.y < y < r.bottom for r in others), \
+                        f"{wn}->{rn} crosses another machine at {(x, y)}"
+
+
+def test_G26_link_colours_on_screen(qt):
+    """A link is drawn in its topic's colour along the reader's cable."""
+    from window import TOPIC
+    img, lay = render(qt, rig_model(100.0), (1920, 1080), "links")
+    view = rig_model(100.0).snapshot(100.0)
+    colour = {k.topic: k.colour for k in view.links}
+    temp = TOPIC[colour["Example Temperature"]]
+    want = tuple(int(temp[i:i + 2], 16) for i in (1, 3, 5))
+    tc, vm = lay.boxes["tc397"], lay.boxes["hpc-vm"]
+    y = (vm.port[1] + lay.switch.y) / 2                    # the hpc-vm cable, between box and switch
+    row = [colour_at(img, x, y) for x in range(int(vm.rect.x), int(vm.rect.right))]
+    assert any(all(abs(a - b) < 40 for a, b in zip(c, want)) for c in row), "the temperature link isn't on hpc-vm's cable"
+    assert tc.port[1] > lay.switch.bottom              # it came up from the edge row

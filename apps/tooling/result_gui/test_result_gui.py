@@ -1,6 +1,6 @@
 """
 test_result_gui.py — result_gui over DDS, the real window running headless
-(Qt's "offscreen" platform). Behaviour rows in README.md: G1-G8, G12-G15, G20; G4-G6 need
+(Qt's "offscreen" platform). Behaviour rows in README.md: G1-G8, G12-G15, G20-G23; G4-G6 need
 to act on the window itself and are tested in-process at the end.
 """
 import os
@@ -137,7 +137,15 @@ def test_G8_without_pyside_says_how_to_install(bus, start_app, tmp_path):
 SCENARIO = ("--scenario", "temperature-skeleton")
 STAND_IN = """
 from fw.app import App
+from fw import types as T
 app = App("hpc_monitor", "a stand-in with a heartbeat, for result_gui's tests")
+if app.arg("--writes-alert", False):
+    w = app.writer("Alert")
+    app.every(0.5, lambda: w.write(T.Alert(source=app.who, alert_id="test")))
+if app.arg("--reads-temperature", False):
+    app.on_data(app.reader("Example Temperature"), lambda s: None)
+if app.arg("--reads-alert", False):
+    app.on_data(app.reader("Alert"), lambda s: None)
 raise SystemExit(app.run())
 """
 
@@ -215,6 +223,21 @@ def test_G15_external_device_data_and_silence(bus, start_app):
     said(gui, "external tc397: no data", 5)
     assert time.monotonic() - t0 < 3.5, "no data should show about 2 s after the last sample"
     assert re.search(r"caption: tc397: no data for 2\.\d s", gui.output), gui.output
+
+
+def test_G21_G23_links_seen_over_dds(bus, start_app, stand_in):
+    """Real writers and readers in three processes: result_gui logs one line per link,
+    an ECU twin's link from the device itself; a stopped writer's link goes."""
+    gui = start(start_app, *SCENARIO)
+    start_app("tc397_twin", node="tc397", wait_heartbeat=False)
+    vm = start_app("hpc_monitor", "--reads-temperature", "--writes-alert", node="hpc-vm", folder=stand_in)
+    start_app("hpc_monitor", "--reads-alert", node="hpc-pi", folder=stand_in)
+    said(gui, "link Example Temperature: tc397 -> hpc-vm/hpc_monitor", 10)
+    said(gui, "link Alert: hpc-vm/hpc_monitor -> hpc-pi/hpc_monitor", 10)
+    assert "_sys/" not in "".join(l for l in gui.output.splitlines() if " link " in l), "plumbing is never drawn"
+    vm.terminate()
+    said(gui, "link gone Alert: hpc-vm/hpc_monitor -> hpc-pi/hpc_monitor", 5)
+    assert "Traceback" not in gui.output and "ERROR" not in gui.output, gui.output
 
 
 def test_G20_bad_scenario_exits_2_with_a_reason(bus, start_app):

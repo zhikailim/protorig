@@ -10,10 +10,11 @@ Optional: `--silence S` (default 2): seconds without data before an external dev
 
 | Topics in | Topics out |
 |---|---|
-| `_sys/NodeStatus`, `_sys/AppState`, each external device's topics (`external/<node>/external.yaml`); later `Alert`, discovery | its heartbeat only |
+| `_sys/NodeStatus`, `_sys/AppState`, each external device's topics (`external/<node>/external.yaml`), Connext's discovery data; later `Alert` | its heartbeat only |
 
-Code: `main.py` reads DDS, `model.py` decides what to show (no DDS, no Qt),
-`layout.py` places it for the window size, `window.py` draws it.
+Code: `main.py` reads DDS, `links.py` works out which writer reaches which
+reader, `model.py` decides what to show (no DDS, no Qt), `layout.py` places it
+for the window size, `window.py` draws it.
 
 ## Behaviour (merge 1: the window, R7)
 
@@ -46,3 +47,15 @@ Every visible change is also one log line, e.g. `machine hpc-pi: lost`, `caption
 | G18 | any window size from 800x450 (the minimum) up | | nothing overlaps or leaves the window; long names shortened with "…" (the app's name before its state word); apps that don't fit end with "+N more" |
 | G19 | anything goes wrong while drawing | | logged once ("drawing failed"), the window stays up |
 | G20 | `--scenario` names no readable scenario | | exit 2 with the reason |
+
+## Behaviour (merge 3: links, R2)
+
+| # | Given | When | Then |
+|---|---|---|---|
+| G21 | a writer and a reader that Connext matches (same topic and type, a shared partition, compatible QoS: the rules `check` uses) | | one link from the writer's app to the reader's app, in its topic's colour, an arrow where it enters the reader; the topics and colours listed top right; log "link Alert: hpc-vm/hpc_monitor -> windows/ivi_standin" |
+| G22 | both apps on one machine | | a short bracket beside the apps, inside the box (shared memory) |
+| G23 | apps on two machines | | along the cables: out of the writer's machine, through the switch, into the reader's (UDP); each topic in its own lane |
+| G24 | QoS, partition or type that don't match | | no link (tested against what Connext itself matched) |
+| G25 | `_sys/` topics, presenter tools, participants outside the scenario | | never drawn |
+| G26 | an end's machine is lost, stopped or silent | | its links dim and dashed; when Connext forgets the writer or reader, the link goes (log "link gone ...") |
+| G27 | a device whose participant name we don't control (the real TC397) | | placed on the external node whose `ip:` is its address; links start or end at the device's box |

@@ -14,7 +14,7 @@ approved, waits for an earlier row) · **Planned** (designed, requirements not
 written yet) · **Waits** (deferred until its trigger happens) · **Decide**
 (an open decision, usually at bring-up).
 
-Status: 20 Oct 2026.
+Status: 26 Oct 2026.
 
 
 ## 1. Next, in build order
@@ -27,7 +27,7 @@ demo: write the requirements for row 5 (`result_gui`), then build it.
 
 | # | Item | What it gives | State | Detail |
 |---|---|---|---|---|
-| 5 | `result_gui` (base phase) | The rig as it really is: machines, data links, failures, alerts | In progress: merge 1 of 4 built | docs/requirements/result_gui.md |
+| 5 | `result_gui` (base phase) | The rig as it really is: machines, data links, failures, alerts | In progress: merges 1-2 of 4 built (machines, layers, states) | docs/requirements/result_gui.md |
 | 6 | `control_panel` | Start, stop, kill, variant and parameter buttons | Planned | node_agent.md N4, N13, N14 |
 | 7 | `ivi_standin` | The IVI side of the story | Planned | scenario README |
 | 8 | C++ layer: `fw::App`, `fw.cmake`, C++ app template, `new app --kind vehicle` | Vehicle apps in C++17 | Planned | WORKFLOW `libs/`, `templates/` |

@@ -22,7 +22,8 @@ only listens. The story screen is `ivi_standin`; the presenter's tool is
   managed machine is `compute` and an `external: true` device is `edge`.
   Only cloud nodes need the key. `check` rejects an unknown layer. The presenter tools (`node_agent`, `result_gui`,
   `control_panel`) are never drawn.
-- A machine shows **up**, **lost** or "not seen yet"; an external device
+- A machine shows **up**, **lost**, **stopped** (every app stopped on purpose:
+  grey, no caption; added 26 Oct 2026) or "not seen yet"; an external device
   (e.g. tc397) shows **data arriving** or **no data**.
 - Nothing else by default: no side panes, no QoS text, no event log. One
   alert banner while an alert is active; one short caption when something

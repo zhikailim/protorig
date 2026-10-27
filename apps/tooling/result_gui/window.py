@@ -67,11 +67,14 @@ class Window(QtWidgets.QWidget):
     def _paint(self, p):
         view = self.model.snapshot(self.clock())
         lay = layout([(m.name, m.layer, len(m.apps), m.external) for m in view.machines],
-                     self.width(), self.height())
+                     self.width(), self.height(), len(view.banner))
         self.last_layout = lay
         p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(), QtGui.QColor(BG))
-        self._text(p, lay.title, self.scenario, DIM, round(lay.label_px * 1.4), bold=True)
+        if view.banner:
+            self._banner(p, view, lay)             # R4: alerts take the title's place
+        else:
+            self._text(p, lay.title, self.scenario, DIM, round(lay.label_px * 1.4), bold=True)
         if not view.machines:
             self._text(p, lay.window, "no machines: start it with  protorig run <scenario> --app result_gui",
                        DIM, lay.name_px, align=QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -98,11 +101,15 @@ class Window(QtWidgets.QWidget):
         self._links(p, view, lay)                  # over the boxes, under the pills
         for m in view.machines:
             self._pills(p, m, lay.boxes[m.name], lay)
-        self._legend(p, view, lay)
+        legend_w = self._legend(p, view, lay)
         if view.caption:
             colour = QtGui.QColor(TEXT)
             colour.setAlphaF(view.caption_alpha)
-            self._text(p, lay.caption, view.caption, colour, round(lay.name_px * 1.1),
+            # Centred on the screen, clear of the legend at the left.
+            cap = lay.caption
+            side = min(legend_w, cap.w * 0.3)
+            r = QtCore.QRectF(cap.x + side, cap.y, cap.w - 2 * side, cap.h)
+            self._text(p, r, view.caption, colour, round(lay.name_px * 1.1),
                        align=QtCore.Qt.AlignmentFlag.AlignCenter, bold=True)
 
     def _machine(self, p, m, b, lay):
@@ -149,22 +156,52 @@ class Window(QtWidgets.QWidget):
         p.setBrush(colour)
         p.drawPolygon([QtCore.QPointF(*tip), left, right])
 
-    def _legend(self, p, view, lay):
-        """Which colour is which topic, right-aligned on the title line."""
+    def _legend(self, p, view, lay) -> float:
+        """Which colour is which topic: a list at the bottom left, beside the caption.
+        Returns its width (the caption keeps clear of it)."""
+        if not view.topics:
+            return 0.0
         f = self._font(lay.label_px, bold=True)
         fm = QtGui.QFontMetricsF(f)
-        x, y = lay.title.right, lay.title.y + lay.title.h / 2
-        for topic, colour in reversed(view.topics):
-            w = fm.horizontalAdvance(topic)
-            x -= w
-            if x < lay.title.x + lay.title.w * 0.4:
-                break                              # never over the scenario's name
-            self._text(p, QtCore.QRectF(x, lay.title.y, w + 2, lay.title.h), topic, TEXT, lay.label_px, bold=True)
-            r = lay.label_px * 0.35
-            p.setPen(QtCore.Qt.PenStyle.NoPen)
-            p.setBrush(QtGui.QColor(TOPIC[colour % len(TOPIC)]))
-            p.drawEllipse(QtCore.QPointF(x - r * 2, y), r, r)
-            x -= r * 6
+        cap = lay.caption
+        line = min(cap.h / max(len(view.topics), 1), lay.label_px * 1.6)
+        r = lay.label_px * 0.35
+        width = 0.0
+        for i, (topic, colour) in enumerate(view.topics):
+            y = cap.bottom - (len(view.topics) - i) * line
+            if y < cap.y - lay.label_px:               # too many topics: the oldest fit
+                continue
+            p.setPen(self._pen(TOPIC[colour % len(TOPIC)], 3))
+            p.drawLine(QtCore.QPointF(cap.x, y + line / 2), QtCore.QPointF(cap.x + r * 5, y + line / 2))
+            box = QtCore.QRectF(cap.x + r * 7, y, cap.w * 0.3 - r * 7, line)
+            self._text(p, box, topic, DIM, lay.label_px, bold=True)
+            width = max(width, r * 7 + fm.horizontalAdvance(topic) + r * 2)
+        return width
+
+    def _banner(self, p, view, lay):
+        """R4: one line per active alert, most severe first; greyed if its source vanished."""
+        colours = {"CRITICAL": TONE[BAD], "WARNING": TONE[WARN], "INFO": "#58a6ff"}
+        px = round(lay.banner[0].h * 0.55)
+        for i, (a, r) in enumerate(zip(view.banner, lay.banner)):
+            edge = QtGui.QColor(TONE[IDLE] if a.lost else colours.get(a.severity, TONE[IDLE]))
+            fill = QtGui.QColor(edge)
+            fill.setAlphaF(0.16)
+            p.fillRect(QtCore.QRectF(r.x, r.y, r.w, r.h), fill)
+            p.fillRect(QtCore.QRectF(r.x, r.y, max(4.0, r.h * 0.1), r.h), edge)
+            f = self._font(px, bold=True)
+            word_w = QtGui.QFontMetricsF(f).horizontalAdvance("CRITICAL") + px
+            x = r.x + r.h * 0.4
+            self._text(p, QtCore.QRectF(x, r.y, word_w, r.h), a.severity, edge, px, bold=True)
+            right = r.right - px * 0.5
+            if view.more_alerts and i == len(view.banner) - 1:       # never shortened away
+                more = f"+{view.more_alerts} more"
+                mw = QtGui.QFontMetricsF(self._font(px)).horizontalAdvance(more) + px
+                self._text(p, QtCore.QRectF(right - mw, r.y, mw, r.h), more, TEXT, px,
+                           align=QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
+                right -= mw
+            where = f"   ({', '.join(a.nodes)})" + ("  · source lost" if a.lost else "")
+            text_r = QtCore.QRectF(x + word_w, r.y, right - (x + word_w), r.h)
+            self._text(p, text_r, a.message + where, DIM if a.lost else TEXT, px)
 
     def _pills(self, p, m, b, lay):
         if m.word == "lost":

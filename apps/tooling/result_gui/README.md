@@ -10,7 +10,7 @@ Optional: `--silence S` (default 2): seconds without data before an external dev
 
 | Topics in | Topics out |
 |---|---|
-| `_sys/NodeStatus`, `_sys/AppState`, each external device's topics (`external/<node>/external.yaml`), Connext's discovery data; later `Alert` | its heartbeat only |
+| `_sys/NodeStatus` (with each app's writer rates), `_sys/AppState`, `Alert`, each external device's topics (`external/<node>/external.yaml`), Connext's discovery data | its heartbeat only |
 
 Code: `main.py` reads DDS, `links.py` works out which writer reaches which
 reader, `model.py` decides what to show (no DDS, no Qt), `layout.py` places it
@@ -52,10 +52,18 @@ Every visible change is also one log line, e.g. `machine hpc-pi: lost`, `caption
 
 | # | Given | When | Then |
 |---|---|---|---|
-| G21 | a writer and a reader that Connext matches (same topic and type, a shared partition, compatible QoS: the rules `check` uses) | | one link from the writer's app to the reader's app, in its topic's colour, an arrow where it enters the reader; the topics and colours listed top right; log "link Alert: hpc-vm/hpc_monitor -> windows/ivi_standin" |
+| G21 | a writer and a reader that Connext matches (same topic and type, a shared partition, compatible QoS: the rules `check` uses) | | one link from the writer's app to the reader's app, in its topic's colour, an arrow where it enters the reader; the topics and colours listed bottom left; log "link Alert: hpc-vm/hpc_monitor -> windows/ivi_standin" |
 | G22 | both apps on one machine | | a short bracket beside the apps, inside the box (shared memory) |
 | G23 | apps on two machines | | along the cables: out of the writer's machine, through the switch, into the reader's (UDP); each topic in its own lane |
 | G24 | QoS, partition or type that don't match | | no link (tested against what Connext itself matched) |
 | G25 | `_sys/` topics, presenter tools, participants outside the scenario | | never drawn |
 | G26 | an end's machine is lost, stopped or silent | | its links dim and dashed; when Connext forgets the writer or reader, the link goes (log "link gone ...") |
 | G27 | a device whose participant name we don't control (the real TC397) | | placed on the external node whose `ip:` is its address; links start or end at the device's box |
+
+## Behaviour (merge 4: lit links, alert banner, overhead; R4-R6)
+
+| # | Given | When | Then |
+|---|---|---|---|
+| G28 | a link | its writer's heartbeat reports data on that topic (every app's heartbeat carries its writers' rates, read from Connext's counters once a second) | lit (solid) while data came in the last 3 s, dim and dashed otherwise; a writer that reports no rate for the topic counts as flowing; log "link lit ..." / "link dim ..." |
+| G29 | active alerts (`Alert` instances; cleared = disposed) | | across the top in the title's place, most severe first: "CRITICAL  Temperature high: 14.7 °C (hpc-vm, hpc-pi)", one line per alert, at most 3, then "+N more"; a source that vanished: greyed, "source lost"; log "alert CRITICAL: ..." / "alert cleared: ..." |
+| R6 | reporting on and off (tests only: no switch) | | reporting costs about 0.004 % of one CPU; an app's reaction time unchanged (median and 95th percentile); result_gui itself well under a quarter of one core (about 6 % measured headless) |

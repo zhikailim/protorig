@@ -31,11 +31,15 @@ CASES = {
 }
 
 
-@pytest.mark.parametrize("case,size", list(itertools.product(CASES, SIZES)), ids=lambda x: str(x))
-def test_G18_nothing_overlaps_or_leaves_the_window(case, size):
+@pytest.mark.parametrize("case,size,banner", list(itertools.product(CASES, SIZES, (0, 3))), ids=lambda x: str(x))
+def test_G18_nothing_overlaps_or_leaves_the_window(case, size, banner):
+    """With no alerts and with the most alert lines (3, R4)."""
     machines = CASES[case]
-    lay = layout(machines, *size)
+    lay = layout(machines, *size, banner)
     win = lay.window
+    assert len(lay.banner) == banner and all(r.inside(lay.title) for r in lay.banner)
+    for a, b in itertools.combinations(lay.banner, 2):
+        assert not a.overlaps(b)
     fixed = [("title", lay.title), ("caption", lay.caption), ("switch", lay.switch)]
     boxes = [(n, b.rect) for n, b in lay.boxes.items()]
     for name, r in fixed + boxes:
@@ -258,3 +262,20 @@ def test_G26_link_colours_on_screen(qt):
     row = [colour_at(img, x, y) for x in range(int(vm.rect.x), int(vm.rect.right))]
     assert any(all(abs(a - b) < 40 for a, b in zip(c, want)) for c in row), "the temperature link isn't on hpc-vm's cable"
     assert tc.port[1] > lay.switch.bottom              # it came up from the edge row
+
+
+# --- merge 4: the alert banner (R4) --------------------------------------------------
+
+def test_G29_banner_on_screen(qt):
+    """A critical alert: a red bar at the left of the first line, the message in light text."""
+    m = rig_model(100.0)
+    m.alert("hpc-vm/hpc_monitor", "temp_high", 2, "Temperature high: 14.7 °C", "alive", 100.0)
+    m.alert("hpc-pi/x", "w", 1, "a warning whose source vanished", "lost", 100.0)
+    m.tick(100.0)
+    for size in ((MIN_W, MIN_H), (1920, 1080)):
+        img, lay = render(qt, m, size, "banner")
+        first, second = lay.banner
+        assert near(colour_at(img, first.x + 1, first.y + first.h / 2), "red"), "critical: red bar"
+        assert near(colour_at(img, second.x + 1, second.y + second.h / 2), "grey"), "source lost: grey bar"
+        row = [colour_at(img, x, first.y + first.h / 2) for x in range(int(first.x), int(first.cx))]
+        assert any(sum(c) > 600 for c in row), "the message should be drawn in light text"

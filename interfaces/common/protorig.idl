@@ -13,6 +13,14 @@
  */
 module protorig {
 
+    // How fast an app writes one topic: samples in the last second, read from
+    // the writer's own counter once a second (never counted per sample).
+    @appendable
+    struct WriterRate {
+        string<64>         topic;
+        float              per_s;
+    };
+
     // One heartbeat per running app, once per second.
     // Keyed by (node, app): the Result GUI shows one row per app per node, and an
     // instance going silent (liveliness lost) is how a dead app turns red.
@@ -25,6 +33,7 @@ module protorig {
         unsigned long long seq;           // increments every heartbeat
         float              cpu_load;      // this process, 0.0 .. 1.0
         long long          stamp_ns;      // sender's wall clock, ns since the Unix epoch
+        sequence<WriterRate, 16> rates;   // its scenario topics (not _sys/), for result_gui's lit links
     };
 
     // Who carries out each command (node_agent N4): the node agent starts,

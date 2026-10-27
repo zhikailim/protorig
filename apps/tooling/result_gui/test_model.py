@@ -289,3 +289,61 @@ def test_an_app_heard_only_through_its_data_gets_a_pill():
     v = m.snapshot(0.0)
     assert "logger" in [a.name for a in machine(v, "hpc-pi").apps]
     assert machine(v, "tc397").apps == ()
+
+
+# --- merge 4: lit links (R2, R5) and the alert banner (R4) ---------------------------
+
+def test_G28_a_link_is_lit_while_its_writer_reports_data():
+    m = model()
+    beat(m, "hpc-pi", "hpc_monitor", 1, 0.0)
+    m.heartbeat("hpc-pi", "hpc_monitor", 2, "alive", 1.0, "w1", {"Alert": 5.0})
+    beat(m, "windows", "ivi_standin", 1, 0.0)
+    m.links(LINKS)
+    m.data("tc397", 1.0)
+    log = m.tick(1.0)
+    v = {k.topic: k.dim for k in m.snapshot(1.0).links}
+    assert v == {"Alert": False, "Example Temperature": False}
+    assert "link lit Alert: hpc-pi/hpc_monitor -> windows/ivi_standin" in log
+    m.heartbeat("hpc-pi", "hpc_monitor", 3, "alive", 2.0, "w1", {"Alert": 0.0})
+    m.heartbeat("hpc-pi", "hpc_monitor", 3, "alive", 3.9, "w1", {"Alert": 9.9})   # the same heartbeat read again
+    m.data("tc397", 3.9)
+    assert not {k.topic: k.dim for k in m.snapshot(3.9).links}["Alert"], "lit for 3 s after the last data"
+    m.data("tc397", 4.5)
+    log = m.tick(4.5)
+    assert {k.topic: k.dim for k in m.snapshot(4.5).links}["Alert"], "dim: nothing written for 3.5 s"
+    assert "link dim Alert: hpc-pi/hpc_monitor -> windows/ivi_standin" in log
+
+
+def test_G28_a_writer_without_rates_counts_as_flowing():
+    m = model()
+    beat(m, "hpc-pi", "hpc_monitor", 1, 0.0)                    # an app that reports no rates
+    beat(m, "windows", "ivi_standin", 1, 0.0)
+    m.links(LINKS[1:])
+    m.tick(0.0)
+    assert not m.snapshot(0.0).links[0].dim
+
+
+def test_G29_banner_most_severe_first_grouped_by_alert():
+    m = model()
+    m.alert("hpc-vm/hpc_monitor", "temp_high", 2, "Temperature high: 14.7 °C", "alive", 1.0)
+    m.alert("hpc-pi/hpc_monitor", "temp_high", 2, "Temperature high: 14.9 °C", "alive", 2.0)
+    m.alert("windows/node_agent", "crash:ivi_standin", 1, "ivi_standin ended on its own", "alive", 0.5)
+    log = m.tick(2.0)
+    v = m.snapshot(2.0)
+    assert [(a.severity, a.message, a.nodes) for a in v.banner] == [
+        ("CRITICAL", "Temperature high: 14.7 °C", ("hpc-vm", "hpc-pi")),
+        ("WARNING", "ivi_standin ended on its own", ("windows",))]
+    assert "alert CRITICAL: Temperature high: 14.7 °C (hpc-vm/hpc_monitor)" in log
+
+
+def test_G29_cleared_gone_lost_greyed_and_at_most_three():
+    m = model()
+    for i in range(5):
+        m.alert(f"n{i}/app", f"a{i}", 1, f"warning {i}", "alive", float(i))
+    v = m.snapshot(5.0)
+    assert len(v.banner) == 3 and v.more_alerts == 2
+    m.alert("n0/app", "a0", 0, "", None, 6.0)
+    assert "alert cleared: warning 0 (n0/app)" in m.tick(6.0)
+    m.alert("n1/app", "a1", 1, "warning 1", "lost", 7.0)
+    v = m.snapshot(7.0)
+    assert [a.message for a in v.banner][0] == "warning 1" and v.banner[0].lost and v.more_alerts == 1

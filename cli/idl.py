@@ -135,6 +135,13 @@ def parse(text: str, qualify: bool = True) -> tuple[dict, list[str]]:
     return types, notes
 
 
+def element(mtype: str) -> tuple[str, str, str]:
+    """A member type split around the type it names: "sequence<Rate,16>" ->
+    ("sequence<", "Rate", ",16>"); a plain type -> ("", type, "")."""
+    m = re.fullmatch(r"(sequence<)([\w:]+)(,\d+>)", mtype)
+    return (m.group(1), m.group(2), m.group(3)) if m else ("", mtype, "")
+
+
 def resolve(types: dict) -> None:
     """Qualify member types across several parsed files at once."""
     _qualify(types)
@@ -149,11 +156,12 @@ def _qualify(types: dict) -> None:
             continue
         resolved = []
         for mname, mtype, is_key in spec["members"]:
-            if "::" not in mtype:
+            pre, elem, post = element(mtype)
+            if "::" not in elem:
                 for depth in range(len(scope), -1, -1):
-                    candidate = "::".join(scope[:depth] + [mtype])
+                    candidate = "::".join(scope[:depth] + [elem])
                     if candidate in types:
-                        mtype = candidate
+                        elem = candidate
                         break
-            resolved.append((mname, mtype, is_key))
+            resolved.append((mname, pre + elem + post, is_key))
         spec["members"] = resolved

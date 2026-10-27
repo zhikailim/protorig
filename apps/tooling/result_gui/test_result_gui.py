@@ -1,6 +1,6 @@
 """
 test_result_gui.py — result_gui over DDS, the real window running headless
-(Qt's "offscreen" platform). Behaviour rows in README.md: G1-G8, G12-G15, G20-G23; G4-G6 need
+(Qt's "offscreen" platform). Behaviour rows in README.md: G1-G8, G12-G15, G20-G23, G28-G29, R6; G4-G6 need
 to act on the window itself and are tested in-process at the end.
 """
 import os
@@ -238,6 +238,45 @@ def test_G21_G23_links_seen_over_dds(bus, start_app, stand_in):
     vm.terminate()
     said(gui, "link gone Alert: hpc-vm/hpc_monitor -> hpc-pi/hpc_monitor", 5)
     assert "Traceback" not in gui.output and "ERROR" not in gui.output, gui.output
+
+
+def test_G28_link_lit_while_data_flows_dim_when_it_stops(bus, start_app, stand_in):
+    """The writer's own heartbeat says how fast it writes (R5): lit while it does."""
+    gui = start(start_app, *SCENARIO)
+    start_app("hpc_monitor", "--writes-alert", node="hpc-vm", folder=stand_in)
+    start_app("hpc_monitor", "--reads-alert", node="hpc-pi", folder=stand_in)
+    said(gui, "link lit Alert: hpc-vm/hpc_monitor -> hpc-pi/hpc_monitor", 10)
+    assert "link dim Alert" not in gui.output
+
+
+def test_G29_alert_banner_over_dds(bus, start_app):
+    from fw import types as T
+    gui = start(start_app, *SCENARIO)
+    key = dict(source="hpc-vm/hpc_monitor", alert_id="temp_high")
+    w = bus.writer("Alert")
+    try:
+        bus.send("Alert", T.Alert(severity=T.Severity.SEVERITY_CRITICAL, message="Temperature high: 14.7 C", **key), to=gui)
+        said(gui, r"alert CRITICAL: Temperature high: 14\.7 C \(hpc-vm/hpc_monitor\)", 5)
+        w.dispose_instance(w.lookup_instance(T.Alert(**key)))
+        said(gui, r"alert cleared: Temperature high: 14\.7 C", 5)
+    finally:                                   # the bus is shared by every test: leave no alert behind
+        h = w.lookup_instance(T.Alert(**key))
+        if h != dds.InstanceHandle.nil():
+            w.dispose_instance(h)
+
+
+def test_R6_result_gui_own_cpu(bus, start_app, stand_in):
+    """Drawing a busy screen ten times a second: its own heartbeat reports its CPU."""
+    beats = bus.listen("_sys/NodeStatus")
+    gui = start(start_app, *SCENARIO)
+    start_app("tc397_twin", node="tc397", wait_heartbeat=False)
+    start_app("hpc_monitor", "--reads-temperature", "--writes-alert", node="hpc-vm", folder=stand_in)
+    start_app("hpc_monitor", "--reads-alert", node="hpc-pi", folder=stand_in)
+    said(gui, "link lit Alert", 10)
+    time.sleep(6)
+    loads = [x.cpu_load for x in beats.all() if x.app == "result_gui" and x.node == NODE][-5:]
+    print(f"\nresult_gui CPU (one core = 1.0): {', '.join(f'{x:.3f}' for x in loads)}")
+    assert loads and max(loads) < 0.25, "result_gui should take well under a quarter of one core"
 
 
 def test_G20_bad_scenario_exits_2_with_a_reason(bus, start_app):

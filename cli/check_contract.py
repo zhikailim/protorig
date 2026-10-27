@@ -160,7 +160,8 @@ def check_idl() -> Iterator[Finding]:
         spec = types[name]
         if spec["kind"] == "struct":
             for mname, mtype, _ in spec["members"]:
-                if "::" in mtype and mtype not in types:
+                elem = idl.element(mtype)[1]
+                if "::" in elem and elem not in types:
                     yield Finding(ERROR, origin[name], f"{name}.{mname} uses unknown type {mtype}")
 
 

@@ -2,13 +2,15 @@
 result_gui — the "under the hood" screen: the rig as it really is, where the
 data goes, and what happens when something fails (docs/requirements/result_gui.md).
 
-Topics in : _sys/NodeStatus, _sys/AppState, the topics of each external device
-            (external/<node>/external.yaml), Connext's discovery data (for links)
+Topics in : _sys/NodeStatus (with each app's writer rates), _sys/AppState, Alert,
+            the topics of each external device (external/<node>/external.yaml),
+            Connext's discovery data (for links)
 Topics out: none but its heartbeat
 Arguments : --silence (seconds, default 2), plus the standard ones
 
-Merges 2-3 of 4: machines in their layers, up / lost / not seen yet, app states,
-captions (R1, R3); links between writers and readers (R2). DDS is read here only; model.py works out what to show,
+Machines in their layers, up / lost / not seen yet, app states, captions (R1,
+R3); links between writers and readers, lit while data flows (R2, R5); the
+alert banner (R4). DDS is read here only; model.py works out what to show,
 window.py draws it.
 
 Run alone:  ./protorig run <scenario> --app result_gui
@@ -74,6 +76,7 @@ if not app.help_requested:
     # state is the point (alive, lost after its 3 s lease, disposed), not each sample.
     beats = app.reader("_sys/NodeStatus")
     rows = app.reader("_sys/AppState")
+    alerts = app.reader("Alert")       # R4: active alerts are ALIVE instances; cleared = disposed
 
     def poll():
         now = time.monotonic()
@@ -81,7 +84,8 @@ if not app.help_requested:
             key = (d.node, d.app) if info.valid else keys(beats, info)
             if key:
                 model.heartbeat(*key, d.seq if info.valid else None, state_of(info), now,
-                                str(info.publication_handle))
+                                str(info.publication_handle),
+                                {r.topic: r.per_s for r in d.rates} if info.valid else None)
         for d, info in rows.read():
             key = (d.node, d.app) if info.valid else keys(rows, info)
             if not key:
@@ -90,6 +94,20 @@ if not app.help_requested:
                 model.app_row(*key, d.state.name, d.detail, now)
             else:                          # the agent stopped or went away: its rows are gone
                 model.app_row(*key, None, "", now)
+        for d, info in alerts.read():
+            if info.valid:
+                key = (d.source, d.alert_id)
+            else:
+                try:
+                    k = alerts.key_value(info.instance_handle)
+                    key = (k.source, k.alert_id)
+                except DDS_ERRORS:             # the instance is gone already
+                    continue
+            st = state_of(info)
+            if info.valid and st != "stopped":
+                model.alert(*key, int(d.severity), d.message, st, now)
+            elif st == "stopped":
+                model.alert(*key, 0, "", None, now)
         for line in model.tick(now):
             log(app.who, "INFO", line)
     app.every(POLL, poll)

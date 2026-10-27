@@ -139,6 +139,8 @@ MIRROR_BREAKS = [
     ("extensibility",    'idl.type_name("alerts::Alert"), APPENDABLE',    'idl.type_name("alerts::Alert"), idl.final', "extensibility"),
     ("wrong type name",  'idl.type_name("protorig::NodeStatus")',         'idl.type_name("protorig::Status")',  "named 'protorig::Status'"),
     ("missing mirror",   '    "alerts::Alert": Alert,\n',                 "",                                    "no Python version of alerts::Alert"),
+    ("sequence bound",   '"rates": [idl.bound(16)]',                     '"rates": [idl.bound(8)]',            "differs from"),
+    ("sequence element", "    per_s: idl.float32 = 0.0",                  "    per_s: float = 0.0",              "differs from"),
 ]
 
 

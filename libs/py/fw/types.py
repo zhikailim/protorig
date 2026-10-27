@@ -11,6 +11,7 @@ Vehicle apps (C/C++) never use this file; they use rtiddsgen output.
 """
 from dataclasses import field
 from enum import IntEnum
+from typing import Sequence
 
 import rti.idl as idl
 
@@ -62,12 +63,22 @@ class Temperature:
 # ============================================================================
 
 @idl.struct(
+    type_annotations=[idl.type_name("protorig::WriterRate"), APPENDABLE],
+    member_annotations={"topic": [idl.bound(64)]},
+)
+class WriterRate:
+    topic: str = ""
+    per_s: idl.float32 = 0.0
+
+
+@idl.struct(
     type_annotations=[idl.type_name("protorig::NodeStatus"), APPENDABLE],
     member_annotations={
         "node": [idl.key, idl.bound(32)],
         "app": [idl.key, idl.bound(32)],
         "os": [idl.bound(16)],
         "qos_variant": [idl.bound(64)],
+        "rates": [idl.bound(16)],
     },
 )
 class NodeStatus:
@@ -78,6 +89,7 @@ class NodeStatus:
     seq: idl.uint64 = 0
     cpu_load: idl.float32 = 0.0
     stamp_ns: idl.int64 = 0
+    rates: Sequence[WriterRate] = field(default_factory=list)
 
 
 @_enum("protorig::Command")
@@ -173,6 +185,7 @@ BY_IDL_NAME = {
     "std_msgs::msg::Time": Time,
     "std_msgs::msg::Header": Header,
     "sensor_msgs::msg::Temperature": Temperature,
+    "protorig::WriterRate": WriterRate,
     "protorig::NodeStatus": NodeStatus,
     "protorig::Command": Command,
     "protorig::DemoControl": DemoControl,

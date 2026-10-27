@@ -177,6 +177,7 @@ class App:
         self._seq = 0
         self._cpu_last = (time.monotonic(), time.process_time())
         self._alive_check: Callable[[], bool] | None = None
+        self._rated: list[list] = []               # [topic, writer, last seq, last time]: R5 rates
         if self._help_requested:
             return                                 # --help: no DDS, run() prints help
 
@@ -267,6 +268,8 @@ class App:
             return _NoDDS()
         w = dds.DataWriter(self._pub, self._topic(topic), self.provider.get_topic_datawriter_qos(topic))
         self._watch_status(w, topic, dds.StatusMask.OFFERED_INCOMPATIBLE_QOS)
+        if not topic.startswith("_sys/"):
+            self._rated.append([topic, w, 0, time.monotonic()])
         return w
 
     def reader(self, topic: str) -> dds.DataReader:
@@ -353,7 +356,24 @@ class App:
         self._status_w.write(T.NodeStatus(
             node=self.node[:32], app=self.name[:32], os=platform.system().lower()[:16],
             qos_variant=self.qos_variant[:64], seq=self._seq, cpu_load=max(0.0, min(1.0, load)),
-            stamp_ns=time.time_ns()))
+            stamp_ns=time.time_ns(), rates=self._writer_rates()))
+
+    def _writer_rates(self) -> list:
+        """R5: samples per second of each scenario topic this app writes, from each
+        writer's own sequence number: one counter read per writer, once a second,
+        nothing per sample. Never fails the heartbeat: a broken read is skipped."""
+        per_topic: dict[str, float] = {}
+        now = time.monotonic()
+        for r in self._rated:
+            topic, w, last, then = r
+            try:
+                seq = int(w.datawriter_protocol_status.last_available_sample_sequence_number)
+            except (*DDS_ERRORS, TypeError, ValueError):
+                continue
+            if then < now:
+                per_topic[topic] = per_topic.get(topic, 0.0) + max(0, seq - last) / (now - then)
+            r[2], r[3] = seq, now
+        return [T.WriterRate(topic=t[:64], per_s=v) for t, v in list(per_topic.items())[:16]]
 
     def _on_control(self, c: T.DemoControl) -> None:
         """N14. Commands for other apps (or for "*" apps) are ignored silently:

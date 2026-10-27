@@ -24,6 +24,9 @@ ROW_WORDS = {
     "APP_STOPPED": ("stopped", IDLE), "APP_KILLED": ("killed", BAD), "APP_CRASHED": ("crashed", BAD),
 }
 CAPTIONED = {"APP_CRASHED": "crashed", "APP_KILLED": "was killed"}
+LIT_FOR = 3.0              # a link stays lit this long after its writer last reported data (R5)
+BANNER_MAX = 3             # alert lines shown; the rest as "+N more" (R4)
+SEVERITY = {0: "INFO", 1: "WARNING", 2: "CRITICAL"}
 
 
 @dataclass(frozen=True)
@@ -54,12 +57,23 @@ class LinkView:
 
 
 @dataclass(frozen=True)
+class AlertLine:
+    """One line of the alert banner: the same alert from one or more machines."""
+    severity: str              # CRITICAL | WARNING | INFO
+    message: str
+    nodes: tuple[str, ...]
+    lost: bool                 # every source of it vanished: greyed, "source lost"
+
+
+@dataclass(frozen=True)
 class View:
     machines: tuple[MachineView, ...]
     caption: str
     caption_alpha: float       # 1 = fully visible, 0 = gone
     links: tuple[LinkView, ...] = ()
     topics: tuple[tuple[str, int], ...] = ()   # the legend: (topic, colour) of the links shown
+    banner: tuple[AlertLine, ...] = ()
+    more_alerts: int = 0
 
 
 @dataclass
@@ -95,14 +109,25 @@ class Model:
         self._log: list[str] = []
         self._links: set[tuple] = set()            # (topic, w_node, w_app, r_node, r_app)
         self._colour: dict[str, int] = {}          # topic -> palette index, kept once given
+        self._wrote: dict[tuple[str, str], dict[str, float]] = {}   # (node, app) -> topic -> last time rate > 0
+        self._lit: set[tuple] = set()              # links lit at the last tick
+        self._alerts: dict[tuple[str, str], tuple] = {}   # (source, alert_id) -> (severity, message, lost, since)
 
     # ---------------------------------------------------------------- feeds (DDS thread)
 
-    def heartbeat(self, node: str, app: str, seq: int | None, state: str, now: float, writer: str = "") -> None:
+    def heartbeat(self, node: str, app: str, seq: int | None, state: str, now: float, writer: str = "",
+                  rates: dict[str, float] | None = None) -> None:
         """One heartbeat instance as read now. seq None: no data with it (a disposed
-        instance). writer: the sending DataWriter's identity (Connext's publication handle)."""
+        instance). writer: the sending DataWriter's identity (Connext's publication handle).
+        rates: samples/s per topic it writes (R5); a topic missing = not known."""
         with self._lock:
             b = self._beats.get((node, app))
+            fresh = seq is not None and (b is None or seq != b.seq or writer != b.writer)
+            if rates is not None and fresh:            # a heartbeat read again says nothing new
+                wrote = self._wrote.setdefault((node, app), {})
+                for t, r in rates.items():
+                    if r > 0 or t not in wrote:
+                        wrote[t] = now if r > 0 else -1e9
             if b is None:
                 self._beats[(node, app)] = _Beat(seq or 0, state, now, writer)
                 return
@@ -155,6 +180,23 @@ class Model:
                 self._log.append(f"link gone {x[0]}: {self._who(x[1], x[2])} -> {self._who(x[3], x[4])}")
             self._links = new
 
+    def alert(self, source: str, alert_id: str, severity: int, message: str, state: str | None, now: float) -> None:
+        """An Alert instance as read now: state alive, lost (its writer vanished) or
+        None (cleared: disposed)."""
+        with self._lock:
+            key = (source, alert_id)
+            old = self._alerts.get(key)
+            if state is None:
+                if old is not None:
+                    del self._alerts[key]
+                    self._log.append(f"alert cleared: {old[1]} ({source})")
+                return
+            new = (SEVERITY.get(int(severity), "INFO"), message, state == "lost",
+                   old[3] if old else now)
+            if old is None or old[:3] != new[:3]:
+                self._log.append(f"alert {new[0]}: {message} ({source})" + (" · source lost" if new[2] else ""))
+            self._alerts[key] = new
+
     @staticmethod
     def _who(node, app):
         return f"{node}/{app}" if app else node
@@ -168,8 +210,25 @@ class Model:
                 word, since = self._machine_word(m, now)
                 if word != m.word:
                     self._changed(m, word, since, now)
+            lit = {x for x in self._links if self._flowing(x, now)}
+            for x in sorted(lit - self._lit):
+                self._log.append(f"link lit {x[0]}: {self._who(x[1], x[2])} -> {self._who(x[3], x[4])}")
+            for x in sorted((self._links & self._lit) - lit):
+                self._log.append(f"link dim {x[0]}: {self._who(x[1], x[2])} -> {self._who(x[3], x[4])}")
+            self._lit = lit
             out, self._log = self._log, []
             return out
+
+    def _flowing(self, x: tuple, now: float) -> bool:
+        """R2/R5: data flows on a link: both ends up, and its writer reported data in
+        the last LIT_FOR s. A writer that reports no rate for it (not known) counts as flowing."""
+        topic, wn, wa, rn, ra = x
+        if any(self._m[n].word not in ("up", "data arriving") for n in (wn, rn)):
+            return False
+        if wa is None:                             # a device: its data arriving is the sign
+            return True
+        last = self._wrote.get((wn, wa), {}).get(topic)
+        return last is None or now - last <= LIT_FOR
 
     def _machine_word(self, m: _Machine, now: float) -> tuple[str, float]:
         if m.external:
@@ -249,10 +308,26 @@ class Model:
                 tone = {"up": OK, "data arriving": OK, "lost": BAD, "no data": BAD}.get(m.word, IDLE)
                 machines.append(MachineView(m.name, m.layer, m.external, m.word, tone,
                                             tuple(self._app_view(m, a) for a in apps)))
-            quiet = {m.name for m in self._m.values() if m.word not in ("up", "data arriving")}
-            links = tuple(LinkView(t, self._colour[t], (wn, wa), (rn, ra), wn in quiet or rn in quiet)
-                          for t, wn, wa, rn, ra in sorted(self._links))
+            links = tuple(LinkView(x[0], self._colour[x[0]], (x[1], x[2]), (x[3], x[4]), not self._flowing(x, now))
+                          for x in sorted(self._links))
+            banner, more = self._banner()
             topics = tuple(sorted({(x.topic, x.colour) for x in links}, key=lambda tc: tc[1]))
             age = now - self._caption_at
             alpha = 1.0 if age < CAPTION_FOR - FADE else max(0.0, (CAPTION_FOR - age) / FADE)
-            return View(tuple(machines), self._caption if alpha > 0 else "", alpha, links, topics)
+            return View(tuple(machines), self._caption if alpha > 0 else "", alpha, links, topics, banner, more)
+
+    def _banner(self) -> tuple[tuple[AlertLine, ...], int]:
+        """R4: active alerts, most severe first; the same alert from several machines
+        on one line. Oldest first within a severity, so lines don't jump about."""
+        rank = {"CRITICAL": 0, "WARNING": 1, "INFO": 2}
+        groups: dict[tuple, list] = {}
+        for (source, alert_id), (sev, msg, lost, since) in self._alerts.items():
+            groups.setdefault((alert_id, sev), []).append((since, source.split("/")[0], msg, lost))
+        lines = []
+        for (alert_id, sev), items in groups.items():
+            items.sort()
+            nodes = tuple(dict.fromkeys(n for _, n, _, _ in items))
+            lines.append((rank.get(sev, 3), items[0][0], AlertLine(sev, items[0][2], nodes, all(i[3] for i in items))))
+        lines.sort(key=lambda x: x[:2])
+        shown = [line for _, _, line in lines]
+        return tuple(shown[:BANNER_MAX]), max(0, len(shown) - BANNER_MAX)

@@ -61,18 +61,21 @@ class Layout:
     switch: Rect
     wan_y: float | None                  # the dashed WAN line, if there is a cloud row
     boxes: dict[str, Box]
+    banner: list[Rect]                   # one per alert line, in the title's place
     name_px: int                         # font sizes in pixels
     word_px: int
     pill_px: int
     label_px: int
 
 
-def layout(machines: list[tuple[str, str, int, bool]], w: float, h: float) -> Layout:
-    """machines: (name, layer, number of apps, external), in scenario order."""
+def layout(machines: list[tuple[str, str, int, bool]], w: float, h: float, banner: int = 0) -> Layout:
+    """machines: (name, layer, number of apps, external), in scenario order.
+    banner: alert lines to show (0-3); they take the title's place, one line each (R4)."""
     w, h = max(w, MIN_W), max(h, MIN_H)
     pad = round(min(w, h) * 0.02)
     gutter = max(70, w * 0.07)                       # layer labels on the left
-    title = Rect(pad, pad, w - 2 * pad, h * 0.07)
+    banner_h = h * 0.055                              # one alert line: large, it is the headline
+    title = Rect(pad, pad, w - 2 * pad, max(h * 0.07, banner * (banner_h + pad * 0.4)))
     caption = Rect(pad, h - pad - h * 0.08, w - 2 * pad, h * 0.08)
 
     by_layer: dict[str, list] = {}
@@ -129,7 +132,8 @@ def layout(machines: list[tuple[str, str, int, bool]], w: float, h: float) -> La
                 box.plug = (switch.x + switch.w * (k + 1) / (len(side) + 1), switch.y if down else switch.bottom)
             boxes[name] = box
     bands = {r: spans[r] for r in ("cloud", "compute", "edge") if r in spans}
-    return Layout(Rect(0, 0, w, h), title, caption, bands, switch, wan_y, boxes,
+    lines = [Rect(title.x, title.y + i * (banner_h + pad * 0.4), title.w, banner_h) for i in range(banner)]
+    return Layout(Rect(0, 0, w, h), title, caption, bands, switch, wan_y, boxes, lines,
                   name_px, word_px, pill_px, label_px)
 
 

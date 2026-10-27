@@ -29,19 +29,24 @@ def make_app(bus):
     saved = {s: signal.getsignal(s) for s in SIGNALS}
     made = []
 
-    def make(name="overhead"):
+    def make(name="overhead", run=False):
         app = App(name, "test", argv=["--node", "test-node", "--domain", str(bus.domain)])
-        made.append(app)
-        return app
+        t = threading.Thread(target=app.run, daemon=True) if run else None
+        made.append((app, t))
+        return app, t
     yield make
-    for a in made:
+    for a, t in made:
         a.stop("test over")
+        if t is not None and t.is_alive():
+            t.join(10)               # DDS closed before the next test: the bus is shared
+        elif t is None:
+            a.run()                  # never started: run() just closes DDS (stop() came first)
     for s, h in saved.items():
         signal.signal(s, h)
 
 
 def test_R5_rates_of_scenario_topics_only(make_app):
-    app = make_app()
+    app, _ = make_app()
     w = app.writer("Alert")
     app.writer("_sys/AppState")                       # plumbing: never reported
     app._writer_rates()                               # starts the count
@@ -59,17 +64,17 @@ def test_R5_rates_of_scenario_topics_only(make_app):
 
 def test_R5_rates_reach_the_heartbeat(bus, make_app):
     beats = bus.listen("_sys/NodeStatus")
-    app = make_app("rated")
+    app, run = make_app("rated", run=True)
     w = app.writer("Alert")
     app.every(0.05, lambda: w.write(T.Alert(source="t", alert_id="x")))
-    threading.Thread(target=app.run, daemon=True).start()
+    run.start()
     wait_for(lambda: any(s.app == "rated" and s.rates and s.rates[0].per_s > 5 for s in beats.all()), 5,
              "a heartbeat with Alert's rate (about 20/s)")
 
 
 def test_R6_reporting_costs_well_under_1_percent_cpu(make_app):
     """16 writers (the most a heartbeat reports): the work is a counter read each, once a second."""
-    app = make_app()
+    app, _ = make_app()
     for _ in range(16):
         app.writer("Alert")
     n = 200
@@ -88,12 +93,12 @@ BLOCK = 4.0         # seconds measured with reporting on, and again with it off
 def test_R6_reaction_time_same_with_reporting_on_and_off(bus, make_app):
     """The app echoes each Temperature as an Alert; the test times each round trip.
     Reporting runs in the app's own loop, so this is where it could delay data."""
-    app = make_app("echo")
+    app, run = make_app("echo", run=True)
     out = app.writer("Alert")
     app.on_data(app.reader("Example Temperature"),
                 lambda s: out.write(T.Alert(source="echo", alert_id="e", value=s.temperature)))
     real = app._writer_rates
-    threading.Thread(target=app.run, daemon=True).start()
+    run.start()
 
     sent: dict[int, float] = {}
     times: list[tuple[int, float]] = []

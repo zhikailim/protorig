@@ -26,7 +26,7 @@ The temperature only advances after a successful write, but the stamp advances e
 
 ## Rig risks (read before bring-up)
 
-1. **At most 5 remote participants.** The ECU can track only 5 other participants. Every protorig process on a managed machine (agents, `run`, every app) lists the ECU as an initial peer, so each announces itself and takes a slot, first come first served: about 10 on `temperature-skeleton`. The agents start first, so the apps that read the ECU's data (hpc_monitor) may get no slot. Options: raise the allocation in the firmware (simplest), or list the ECU as a peer only in the apps that read its topics.
+1. **At most 5 remote participants.** The ECU can track only 5 other participants. Every protorig process on a managed machine (agents, `run`, every app) lists the ECU as an initial peer, so each announces itself and takes a slot, first come first served: about 10 on `temperature-skeleton`, plus RTI tools pointed at the ECU (Admin Console, rtiddsspy), which create participants of their own. The agents start first, so the apps that read the ECU's data (hpc_monitor) may get no slot. Options: raise the allocation in the firmware (simplest, and the only one that also covers the RTI tools), or list the ECU as a peer only in the apps that read its topics.
 2. **The ECU announces itself only to Windows, and only to its first two DDS processes** (`1@_udp://172.23.100.102`). Not a problem: Connext Micro answers any participant that announces itself to it first (confirmed by Zhikai, 30 Oct 2026), and every managed machine lists the ECU as a peer. Within the limit of risk 1.
 
 ## Files

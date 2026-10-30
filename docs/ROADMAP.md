@@ -14,7 +14,7 @@ approved, waits for an earlier row) · **Planned** (designed, requirements not
 written yet) · **Waits** (deferred until its trigger happens) · **Decide**
 (an open decision, usually at bring-up).
 
-Status: 26 Oct 2026.
+Status: 30 Oct 2026.
 
 
 ## 1. Next, in build order
@@ -27,7 +27,7 @@ demo: write the requirements for row 5 (`result_gui`), then build it.
 
 | # | Item | What it gives | State | Detail |
 |---|---|---|---|---|
-| 5 | `result_gui` (base phase) | The rig as it really is: machines, data links, failures, alerts | In progress: merges 1-2 of 4 built (machines, layers, states) | docs/requirements/result_gui.md |
+| 5 | `result_gui` (base phase) | The rig as it really is: machines, data links, failures, alerts | Done 30 Oct 2026 (base phase, R1-R7); improvements next, one at a time, after real use | docs/requirements/result_gui.md |
 | 6 | `control_panel` | Start, stop, kill, variant and parameter buttons | Planned | node_agent.md N4, N13, N14 |
 | 7 | `ivi_standin` | The IVI side of the story | Planned | scenario README |
 | 8 | C++ layer: `fw::App`, `fw.cmake`, C++ app template, `new app --kind vehicle` | Vehicle apps in C++17 | Planned | WORKFLOW `libs/`, `templates/` |
@@ -35,7 +35,7 @@ demo: write the requirements for row 5 (`result_gui`), then build it.
 | 10 | `protorig build` | Builds the C++ apps on each machine | Planned | WORKFLOW `build` |
 | 11 | `bootstrap` (`linux.sh`, `windows.ps1`) | One-command machine setup | Planned | WORKFLOW `bootstrap/` |
 | 12 | `protorig preflight` | "Is every node up and discovered?" before going live | Planned | WORKFLOW CLI table |
-| 13 | Hardware bring-up: VM, then TC397, then Pi | The demo on the real rig | Planned | QUICKSTART |
+| 13 | Hardware bring-up: VM, then TC397, then Pi | The demo on the real rig | VM done 30 Oct 2026 (two machines live, cable-pull beat); TC397 and Pi next | QUICKSTART |
 | 14 | TC397 tracks at most 5 remote participants (rig has about 10) | Without a fix, some apps never see the ECU's data | Decide | `external/tc397/README.md`; design doc risk 1 |
 | 15 | TC397 announces itself only to Windows | The VM and Pi may not discover it | Decide | design doc risk 2 |
 | 16 | ECU unknowns: liveliness lease, `source_timestamp`, task period | The twin and displays depend on them | Decide | design doc risk 8 |
@@ -78,6 +78,8 @@ demo: write the requirements for row 5 (`result_gui`), then build it.
 
 ## Done
 
+- 30 Oct 2026: `result_gui` base phase (row 5): machines in layers, links Connext would match, lit while data flows, alert banner, captions; heartbeats carry writer rates (R5, overhead measured: ~0.004 % CPU). VM bring-up: Windows and VM live, cable pulled for 10 s and 44 s, back at once both times.
+- 26-27 Oct 2026: `run` says once that the rest keeps running (B14); "did you mean" for app names.
 - 20 Oct 2026: `check` rules (step 5, row 4): `node_agent` in `run:`, an app twice on a node, app names over 26 characters, variants that would stop data flowing (V8; `Variant.Alert.BestEffort` now reader-only); undefined names in Python.
 - 20 Oct 2026: robustness review of `--sim` (B11 widened, B13 approved), a simplify pass, reporting and "simple to use" rules in CLAUDE.md; `run <scenario> --app X` replaces `run --scenario <scenario> --app X`.
 - 16 Oct 2026: `run --sim` through agents (step 4b, row 3): one agent per node on this PC, the same start/watch/stop as `--live`.

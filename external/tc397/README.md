@@ -26,8 +26,8 @@ The temperature only advances after a successful write, but the stamp advances e
 
 ## Rig risks (read before bring-up)
 
-1. **At most 5 remote participants.** The ECU can track only 5 other participants. `temperature-skeleton` has about 7 (2 per HPC, 3 on Windows). Participants beyond the fifth may never see the ECU's data. Options: raise the allocation in the firmware, or run fewer apps that read the ECU.
-2. **The ECU announces itself only to Windows (.102).** The VM and Pi find the ECU only if *they* list it as an initial peer (they do, via the scenario) and the ECU accepts them. Unproven: the 15-minute `rtiddsspy` smoke test from the VM answers it.
+1. **At most 5 remote participants.** The ECU can track only 5 other participants. Every protorig process on a managed machine (agents, `run`, every app) lists the ECU as an initial peer, so each announces itself and takes a slot, first come first served: about 10 on `temperature-skeleton`. The agents start first, so the apps that read the ECU's data (hpc_monitor) may get no slot. Options: raise the allocation in the firmware (simplest), or list the ECU as a peer only in the apps that read its topics.
+2. **The ECU announces itself only to Windows, and only to its first two DDS processes** (`1@_udp://172.23.100.102`). Not a problem: Connext Micro answers any participant that announces itself to it first (confirmed by Zhikai, 30 Oct 2026), and every managed machine lists the ECU as a peer. Within the limit of risk 1.
 
 ## Files
 
@@ -43,6 +43,5 @@ The known-good profile and host sample were built with Connext 7.6.0; protorig u
 - Confirm the task period (10 Hz) in the OS configuration.
 - Confirm the participant liveliness lease (Admin Console); update `external.yaml` if it isn't 100 s.
 - Check what the ECU puts in each sample's `source_timestamp` (probably time since boot). Until then, no app relies on it.
-- Run the `rtiddsspy` smoke test from the VM and the Pi (risk 2).
 - Decide how to handle the 5-participant limit (risk 1).
 - Once you've confirmed the board runs the IDL in `interfaces/external/tc397/` (the host sample receiving data is good evidence), run `./protorig lock tc397` to record it.

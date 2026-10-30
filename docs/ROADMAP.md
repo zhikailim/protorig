@@ -36,8 +36,7 @@ demo: write the requirements for row 5 (`result_gui`), then build it.
 | 11 | `bootstrap` (`linux.sh`, `windows.ps1`) | One-command machine setup | Planned | WORKFLOW `bootstrap/` |
 | 12 | `protorig preflight` | "Is every node up and discovered?" before going live | Planned | WORKFLOW CLI table |
 | 13 | Hardware bring-up: VM, then TC397, then Pi | The demo on the real rig | VM done 30 Oct 2026 (two machines live, cable-pull beat); TC397 and Pi next | QUICKSTART |
-| 14 | TC397 tracks at most 5 remote participants (rig has about 10) | Without a fix, some apps never see the ECU's data | Decide | `external/tc397/README.md`; design doc risk 1 |
-| 15 | TC397 announces itself only to Windows | The VM and Pi may not discover it | Decide | design doc risk 2 |
+| 14 | TC397 tracks at most 5 remote participants (rig has about 10, and every process announces itself to it) | Without a fix, hpc_monitor may never see the ECU's data | Decide: reflash with a higher limit, or peer only from readers | `external/tc397/README.md`; design doc risk 1 |
 | 16 | ECU unknowns: liveliness lease, `source_timestamp`, task period | The twin and displays depend on them | Decide | design doc risk 8 |
 | 17 | C++ build route on the Pi (ARM) | Connext host package on the Pi, or build on the VM | Decide | WORKFLOW `bootstrap/`; design doc risk 9 |
 | 18 | Clock sync across machines | Correct "changed 3 s ago" and latency figures | Decide | node_agent.md N12 decision B; design doc risk 3 |
@@ -78,6 +77,7 @@ demo: write the requirements for row 5 (`result_gui`), then build it.
 
 ## Done
 
+- 30 Oct 2026: row 15, TC397 announcing only to Windows: no problem, Connext Micro answers participants that announce to it first.
 - 30 Oct 2026: `result_gui` base phase (row 5): machines in layers, links Connext would match, lit while data flows, alert banner, captions; heartbeats carry writer rates (R5, overhead measured: ~0.004 % CPU). VM bring-up: Windows and VM live, cable pulled for 10 s and 44 s, back at once both times.
 - 26-27 Oct 2026: `run` says once that the rest keeps running (B14); "did you mean" for app names.
 - 20 Oct 2026: `check` rules (step 5, row 4): `node_agent` in `run:`, an app twice on a node, app names over 26 characters, variants that would stop data flowing (V8; `Variant.Alert.BestEffort` now reader-only); undefined names in Python.
